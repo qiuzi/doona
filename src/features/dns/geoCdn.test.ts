@@ -70,6 +70,13 @@ it('shows a category case-insensitively and truncates at the limit', async () =>
   if (filtered.action === 'show') expect(filtered.entries).toEqual([{type: 'full', value: 'mail.google.com', attrs: ['cn']}]);
 });
 
+it('returns the whole category when no limit is given', async () => {
+  const {queryGeodataCdn} = await loadModule(okFetch(dat));
+  const shown = await queryGeodataCdn({action: 'show', code: 'google'});
+  expect(shown).toMatchObject({total: 4, truncated: false});
+  if (shown.action === 'show') expect(shown.entries).toHaveLength(4);
+});
+
 it('rejects an unknown category with a local error', async () => {
   const {queryGeodataCdn} = await loadModule(okFetch(dat));
   const failure = await queryGeodataCdn({action: 'show', code: 'nope'}).catch((error: unknown) => error);

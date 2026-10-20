@@ -314,7 +314,9 @@ function matchesDomain(entry: GeoEntry, domain: string): boolean {
 
 export async function queryGeodataCdn(query: GeodataQuery): Promise<GeodataQueryResponse> {
   const categories = await loadGeodata();
-  const limit = query.limit ?? 1000;
+  // No default cap: the data is local, and the results view pages long lists
+  // instead of truncating them. An explicit limit still applies.
+  const limit = query.limit ?? Number.POSITIVE_INFINITY;
   if (query.action === 'show') {
     const code = (query.code ?? '').toLowerCase();
     const category = categories.find(item => item.code === code);

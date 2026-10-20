@@ -65,7 +65,7 @@ export function useDns({go, query}: PageProps) {
         if (asked.type === geositeQueryType) {
           const parsed = geoInput(asked.domain);
           if (!parsed.ok) throw new Error(t(parsed.error));
-          const value = await queryGeodataCdn({...parsed.query, limit: 1000});
+          const value = await queryGeodataCdn({...parsed.query});
           if (!signal.aborted) {
             setGeoResult(value);
             setResult(null);
