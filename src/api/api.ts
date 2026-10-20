@@ -49,8 +49,6 @@ import type {
   ProviderCreate,
   NodeCreate,
   GeoData,
-  GeodataQuery,
-  GeodataQueryResponse,
   RuleList,
   DnsRuleList,
   LogOptions,
@@ -106,8 +104,6 @@ export interface Api {
   createNode(request: NodeCreate, signal?: AbortSignal): Promise<Node | OperationAccepted>;
   deleteNode(nodeId: string, signal?: AbortSignal): Promise<DeleteCount | OperationAccepted>;
   geodata(signal?: AbortSignal): Promise<GeoData>;
-  /** Read-only geosite content query: a category's entries (show) or a domain reverse-lookup (find). */
-  queryGeodata(query: GeodataQuery, signal?: AbortSignal): Promise<GeodataQueryResponse>;
   /** The running generation's rule dictionary; ids match routing trace and flow evidence. */
   rules(signal?: AbortSignal): Promise<RuleList>;
   /** The running generation's DNS request and response rules, each list ending with its fallback. */

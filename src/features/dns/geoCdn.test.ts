@@ -65,9 +65,9 @@ it('shows a category case-insensitively and truncates at the limit', async () =>
   const {queryGeodataCdn} = await loadModule(okFetch(dat));
   const shown = await queryGeodataCdn({action: 'show', code: 'GOOGLE', limit: 2});
   expect(shown).toMatchObject({action: 'show', code: 'google', total: 4, truncated: true});
-  expect(shown.entries).toHaveLength(2);
+  if (shown.action === 'show') expect(shown.entries).toHaveLength(2);
   const filtered = await queryGeodataCdn({action: 'show', code: 'google', attr: 'cn'});
-  expect(filtered.entries).toEqual([{type: 'full', value: 'mail.google.com', attrs: ['cn']}]);
+  if (filtered.action === 'show') expect(filtered.entries).toEqual([{type: 'full', value: 'mail.google.com', attrs: ['cn']}]);
 });
 
 it('rejects an unknown category with a local error', async () => {
@@ -80,7 +80,10 @@ it('rejects an unknown category with a local error', async () => {
 
 it('finds a domain across categories by every entry kind', async () => {
   const {queryGeodataCdn} = await loadModule(okFetch(dat));
-  const codes = async (value: string) => (await queryGeodataCdn({action: 'find', value})).matches?.map(match => `${match.code}:${match.type}`);
+  const codes = async (value: string) => {
+    const found = await queryGeodataCdn({action: 'find', value});
+    return found.action === 'find' ? found.matches.map(match => `${match.code}:${match.type}`) : [];
+  };
   expect(await codes('www.google.com')).toContain('google:domain');
   expect(await codes('mail.google.com')).toContain('google:full');
   expect(await codes('sub.example.org')).toContain('gfw:domain');

@@ -9,7 +9,6 @@ import {
   type EventKind,
   type EventOptions,
   type FlowDetail,
-  type GeodataQueryResponse,
   type LogOptions,
   type LogRecord,
   type OperationAccepted,
@@ -364,8 +363,6 @@ export function createApi(base: string, token?: string, clock: ServerClock = cre
     createNode: async (body, signal) => resultOrAccepted(await client.POST('/api/v1/nodes', {body, signal})),
     deleteNode: async (id, signal) => resultOrAccepted(await client.DELETE('/api/v1/nodes/{node_id}', {params: {path: {node_id: id}}, signal})),
     geodata: async signal => read(await client.GET('/api/v1/geodata', {signal})),
-    // Two content types (JSON and text) leave the data unknown; doona only asks for JSON.
-    queryGeodata: async (query, signal) => read(await client.GET('/api/v1/geodata/query', {params: {query}, signal})) as GeodataQueryResponse,
     rules: async signal => read(await client.GET('/api/v1/rules', {signal})),
     dnsRules: async signal => read(await client.GET('/api/v1/dns/rules', {signal})),
     updateGeodata: async signal => accepted(await starts.POST('/api/v1/geodata/update', {signal})),

@@ -1,6 +1,7 @@
 import {expect, it} from 'vitest';
 import {capabilities, dnsCache} from '../../../mock/fixtures';
-import type {ConfigSource, DnsLogRecord, DnsQueryResponse, GeodataQueryResponse} from '../../api/model';
+import type {ConfigSource, DnsLogRecord, DnsQueryResponse} from '../../api/model';
+import type {GeodataQueryResponse} from './geoCdn';
 import {translate, type Translator} from '../../i18n';
 import {appendDnsLog, dnsAnswerView, dnsCacheView, dnsLogDetail, dnsLogsExport, dnsLogView, dnsLogWindow, dnsQueryUpstreams, dnsQueryView} from './view';
 const t: Translator = (key, params) => translate('en', key, params);

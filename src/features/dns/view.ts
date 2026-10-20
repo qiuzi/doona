@@ -1,4 +1,5 @@
-import type {Capabilities, ConfigSource, DnsCacheList, DnsLogList, DnsLogRecord, DnsQueryResponse, GeodataQueryResponse} from '../../api/model';
+import type {Capabilities, ConfigSource, DnsCacheList, DnsLogList, DnsLogRecord, DnsQueryResponse} from '../../api/model';
+import type {GeodataQueryResponse} from './geoCdn';
 import {offered} from '../../api/capabilities';
 import {geoInput} from './geoInput';
 import {enumLabel} from '../../i18n/enum';

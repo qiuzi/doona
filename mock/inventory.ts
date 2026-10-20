@@ -48,7 +48,6 @@ type InventoryApi = Pick<
   | 'createNode'
   | 'deleteNode'
   | 'geodata'
-  | 'queryGeodata'
   | 'updateGeodata'
 >;
 export function createInventory(
@@ -364,36 +363,6 @@ export function createInventory(
       signal?.throwIfAborted();
       if (!capabilities.resources.geodata.available) throw new ApiError(404, 'capability_not_supported', 'Geodata is unavailable');
       return geodata.status();
-    },
-    // A small fixed dataset, enough to exercise the query tab's geosite type.
-    queryGeodata: async (query, signal) => {
-      signal?.throwIfAborted();
-      if (!capabilities.resources.geodata.available) throw new ApiError(404, 'capability_not_supported', 'Geodata is unavailable');
-      if (query.action === 'find') {
-        const value = query.value ?? '';
-        return {
-          action: 'find',
-          value,
-          total: 2,
-          truncated: false,
-          matches: [
-            {code: 'google', type: 'domain', value, attrs: []},
-            {code: 'gfw', type: 'full', value, attrs: ['cn']}
-          ]
-        };
-      }
-      const code = (query.code ?? '').toLowerCase();
-      if (code !== 'google') throw new ApiError(404, 'resource_not_found', 'Geosite category not found.');
-      return {
-        action: 'show',
-        code,
-        total: 2,
-        truncated: false,
-        entries: [
-          {type: 'domain', value: 'example.com', attrs: []},
-          {type: 'full', value: 'exact.test', attrs: []}
-        ]
-      };
     },
     updateGeodata: async signal => {
       signal?.throwIfAborted();

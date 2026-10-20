@@ -629,35 +629,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/geodata/query": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Query geosite category contents or reverse-lookup a domain
-         * @description Read-only geosite content query. `action=show` lists the entries of one
-         *     category (`code`, case-insensitive); `action=find` reverse-looks-up a
-         *     domain across all categories with the same matching semantics the router
-         *     uses (full/domain/keyword/regexp). Only geosite is exposed; geoip is
-         *     never loaded. The scan reads the geosite file the running datapath was
-         *     built from, falling back to the standard dat search locations. Parsed
-         *     from disk on every query; nothing is retained between queries. `limit`
-         *     caps returned entries (default 1000, max 10000); `total` reports the
-         *     untruncated count and `truncated` marks truncation. Reading never
-         *     touches the network.
-         */
-        get: operations["queryGeodata"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/geodata/update": {
         parameters: {
             query?: never;
@@ -2288,36 +2259,6 @@ export interface components {
             required_codes?: {
                 [key: string]: string[];
             };
-        };
-        /** @description Response of GET /api/v1/geodata/query. */
-        GeodataQueryResponse: {
-            /** @enum {string} */
-            action: "show" | "find";
-            /** @description The queried category, lowercase; present for action=show. */
-            code?: string;
-            /** @description The looked-up domain; present for action=find. */
-            value?: string;
-            /** @description Entry/match count before the limit truncated it. */
-            total: number;
-            /** @description True when total exceeds the returned entries/matches. */
-            truncated: boolean;
-            /** @description Category entries; present for action=show. */
-            entries?: components["schemas"]["GeodataQueryEntry"][];
-            /** @description Reverse-lookup hits; present for action=find. */
-            matches?: (components["schemas"]["GeodataQueryEntry"] & {
-                /** @description The category holding the matching entry, lowercase. */
-                code: string;
-            })[];
-        };
-        GeodataQueryEntry: {
-            /**
-             * @description The geosite entry kind.
-             * @enum {string}
-             */
-            type: "keyword" | "regexp" | "domain" | "full";
-            value: string;
-            /** @description '@attr' attribute names; '!name' marks an explicitly-false bool. */
-            attrs: string[];
         };
         GeoDataUpdateAccepted: components["schemas"]["OperationAccepted"] & {
             /** @constant */
@@ -5190,51 +5131,6 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             413: components["responses"]["TooLarge"];
-        };
-    };
-    queryGeodata: {
-        parameters: {
-            query: {
-                action: "show" | "find";
-                /** @description Category code; required for action=show. */
-                code?: string;
-                /** @description Domain; required for action=find. */
-                value?: string;
-                /** @description Only for action=show; keep entries carrying this @attr attribute. */
-                attr?: string;
-                limit?: number;
-                /** @description Response shape; text renders one entry value per line for show and one category code per line for find, as text/plain. */
-                format?: "json" | "text";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Category entries or reverse-lookup matches */
-            200: {
-                headers: {
-                    "Cache-Control": components["headers"]["NoStore"];
-                    "X-Content-Type-Options": components["headers"]["NoSniff"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GeodataQueryResponse"];
-                    /**
-                     * @description format=text rendering; one entry value per line for show, one category code per line for find.
-                     * @example example.com
-                     *     exact.test
-                     */
-                    "text/plain": unknown;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            413: components["responses"]["TooLarge"];
-            503: components["responses"]["Unavailable"];
         };
     };
     updateGeoData: {

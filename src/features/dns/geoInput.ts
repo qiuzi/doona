@@ -5,9 +5,9 @@ export type GeoQuery = {action: 'show'; code: string} | {action: 'find'; value: 
 export type GeoInput = {ok: true; query: GeoQuery} | {ok: false; error: Key};
 
 // The smart input behind the DNS page's geosite query type: `geosite:<code>`
-// lists one category, anything else is a domain reverse-lookup. honk only
-// serves geosite, so geoip prefixes and bare IP literals are refused up front
-// instead of failing against the backend.
+// lists one category, anything else is a domain reverse-lookup. The query is
+// answered from the browser-side dat, so geoip prefixes and bare IP literals
+// are refused up front instead of downloading.
 export function geoInput(raw: string): GeoInput {
   const input = raw.trim();
   if (!input) return {ok: false, error: 'dns.geodataEmpty'};

@@ -1,13 +1,19 @@
 import {ApiError, LocalError} from '../../api/error';
-import type {GeodataQuery, GeodataQueryEntry, GeodataQueryResponse} from '../../api/model';
+import type {GeoQuery} from './geoInput';
 
 // The DNS page's geosite query reads Loyalsoldier's geosite.dat from a CDN and
 // answers in the browser, so it works with any backend — including one whose
 // native API has no geodata query endpoint. The file is downloaded once,
 // cached in IndexedDB, and revalidated in the background at most once a day;
-// the parsed list is kept in memory for the session. The response shape is the
-// backend's, so the results view does not know the difference.
+// the parsed list is kept in memory for the session.
 export const GEOSITE_CDN_URL = 'https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat';
+
+// The query and its answer, in the shape the results view renders.
+export type GeodataQuery = GeoQuery & {attr?: string; limit?: number};
+export type GeodataQueryEntry = {type: 'keyword' | 'regexp' | 'domain' | 'full'; value: string; attrs: string[]};
+export type GeodataQueryResponse =
+  | {action: 'show'; code: string; total: number; truncated: boolean; entries: GeodataQueryEntry[]}
+  | {action: 'find'; value?: string; total: number; truncated: boolean; matches: (GeodataQueryEntry & {code: string})[]};
 
 type GeoEntry = {type: GeodataQueryEntry['type']; value: string; attrs: string[]};
 type GeoCategory = {code: string; entries: GeoEntry[]};
