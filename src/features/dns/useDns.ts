@@ -10,6 +10,7 @@ import {downloadFile, exportName, panelQuery, toast, toastErrorDetail, useDeboun
 import type {PageProps} from '../../shell/routes';
 import {appendDnsLog, dnsCacheView, dnsLogDetail, dnsLogsExport, dnsLogView, dnsLogWindow, dnsQueryUpstreams, dnsQueryView, geositeQueryType} from './view';
 import {geoInput} from './geoInput';
+import {queryGeodataCdn} from './geoCdn';
 import {href, pickTab, within, tabQuery} from '../../shell/route';
 import {ApiError, errorText, isSnapshotRefusal} from '../../api/error';
 import {wait} from '../../api/wait';
@@ -58,12 +59,12 @@ export function useDns({go, query}: PageProps) {
   const submit = async (asked = {domain, type}) => {
     try {
       await run('query', async signal => {
-        // The geosite type asks the geodata endpoint, not the DNS one; the form's
-        // upstream and cache controls do not apply to it.
+        // The geosite type asks the CDN's Loyalsoldier data in this tab's browser,
+        // not the backend: the form's upstream and cache controls do not apply.
         if (asked.type === geositeQueryType) {
           const parsed = geoInput(asked.domain);
           if (!parsed.ok) throw new Error(t(parsed.error));
-          const value = await api.queryGeodata({...parsed.query, limit: 1000}, signal);
+          const value = await queryGeodataCdn({...parsed.query, limit: 1000});
           if (!signal.aborted) {
             setGeoResult(value);
             setResult(null);
