@@ -116,15 +116,17 @@ const localeChunk = (lang?: string) =>
 test.describe('language loading', () => {
   // Chunks fetched by the service worker would bypass page.route.
   test.use({serviceWorkers: 'block'});
-  test('fetches only the saved language', async ({page}) => {
+  test('fetches only the saved language, and only the parts Activity shows', async ({page}) => {
+    // The idle warm-up fetches the other pages' part once the browser is idle; held back, only rendering fetches remain.
+    await page.addInitScript(() => (window.requestIdleCallback = () => 0));
     const fetched: string[] = [];
     page.on('request', request => {
       if (localeChunk().test(request.url())) fetched.push(request.url());
     });
     await page.goto('/#/activity');
     await expect(page.locator('.rp-nav').first()).toBeVisible();
-    expect(fetched).toHaveLength(1);
-    expect(fetched[0]).toMatch(localeChunk('en'));
+    // Activity shows the core and activity parts of the catalogue; the other pages' part arrives with them.
+    expect(fetched.map(url => url.match(/locale-en-(\w+)-/)?.[1]).sort()).toEqual(['activity', 'core']);
   });
 
   test('falls back to zh-TW when the saved language does not load', async ({page}) => {

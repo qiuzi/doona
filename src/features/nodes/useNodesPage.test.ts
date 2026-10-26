@@ -6,7 +6,7 @@ import {deferred, hookHarness} from '../../store/testHelpers';
 import {subscriptionActionKind} from './view';
 import {runSubscriptionAction, useNodesPage} from './useNodesPage';
 
-const {capabilities} = await vi.hoisted(() => import('../../../mock/fixtures'));
+const {capabilities, version} = await vi.hoisted(() => import('../../../mock/fixtures'));
 const store = vi.hoisted(() => ({addNode: null as unknown as (input: unknown) => Promise<Node | null>}));
 vi.mock('react', async original => ({
   ...(await original<typeof import('react')>()),
@@ -23,7 +23,7 @@ vi.mock('../../store', async () => ({
   useProviders: () => ({data: {providers: []}, refetch: () => undefined, loading: false, error: null}),
   useOutboundNames: () => [],
   useProviderRefresh: () => ({refresh: vi.fn()}),
-  useVersion: () => ({data: undefined})
+  useVersion: () => ({data: version})
 }));
 vi.mock('../../store/config', () => ({useCompleteness: () => () => true, useConfig: () => ({data: undefined, loading: false})}));
 vi.mock('../../store/mainSource', async original => ({
@@ -127,4 +127,82 @@ it('lands a result in the dialog that sent it', async () => {
     expect(read().problem).toEqual(outcome === 'resolve' ? null : expect.objectContaining({id: 1, kind: 'negative'}));
     expect(vi.mocked(toast).mock.calls.map(call => call[0])).toEqual(outcome === 'resolve' ? ['positive'] : []);
   }
+});
+
+it('explains empty add forms and shows an edited unsupported link on its field', () => {
+  read().addNode!();
+  expect(read()).toMatchObject({formValid: false, formReason: 'Enter a name', nodeLinkError: null});
+  read().setForm({...read().form, name: 'first', value: 'garbage://x'});
+  expect(read().nodeLinkError).toBeTruthy();
+  expect(read().formValid).toBe(false);
+  read().setDialog({kind: 'provider'});
+  read().setForm({...read().form, name: '', value: ''});
+  expect(read()).toMatchObject({formValid: false, formReason: 'Enter a name'});
+});
+
+it('puts a duplicate-name refusal on Name and clears it after the name changes', async () => {
+  const {ApiError} = await import('../../api/error');
+  store.addNode = async () => {
+    throw new ApiError(409, 'state_conflict', 'An inline node named first already exists');
+  };
+  read().addNode!();
+  read().setForm({...read().form, name: 'first', value: 'vless://first'});
+  await read().submit(vi.fn());
+  expect(read()).toMatchObject({nodeNameError: 'A node already uses this name.', problem: null, formValid: false});
+  read().setForm({...read().form, name: 'second'});
+  expect(read()).toMatchObject({nodeNameError: null, formValid: true});
+});
+
+it('adds valid lines sequentially, keeps failed lines and retries a single remainder', async () => {
+  const first = deferred<Node | null>();
+  store.addNode = vi.fn().mockReturnValueOnce(first.promise).mockRejectedValueOnce(new Error('backend refused')).mockResolvedValue({name: 'third'});
+  read().addNode!();
+  read().setNodeLink('vless://one#first\nvless://two#second\nvless://three#third');
+  expect(read().formValid).toBe(true);
+  const close = vi.fn();
+  const sent = read().submit(close);
+  expect(store.addNode).toHaveBeenCalledTimes(1);
+  expect(read().submitLabel).toBe('Adding 1/3');
+  await read().submit(close);
+  expect(store.addNode).toHaveBeenCalledTimes(1);
+  first.resolve({name: 'first'} as Node);
+  await sent;
+  expect(vi.mocked(store.addNode).mock.calls.map(([input]) => input)).toEqual([
+    {name: 'first', link: 'vless://one#first'},
+    {name: 'second', link: 'vless://two#second'},
+    {name: 'third', link: 'vless://three#third'}
+  ]);
+  expect(read().form).toMatchObject({name: 'second', value: 'vless://two#second'});
+  expect(read().batchErrors).toEqual(['second: backend refused']);
+  expect(close).not.toHaveBeenCalled();
+  expect(toast).toHaveBeenCalledExactlyOnceWith('warning', 'Added 2, failed 1');
+  expect(read().formValid).toBe(true);
+  await read().submit(close);
+  expect(close).toHaveBeenCalledOnce();
+});
+it('excludes invalid lines, counts them and blocks batches over 200', async () => {
+  store.addNode = vi.fn().mockResolvedValue({name: 'good'});
+  read().addNode!();
+  read().setNodeLink('wrong://bad\nvless://good');
+  await read().submit(vi.fn());
+  expect(store.addNode).toHaveBeenCalledExactlyOnceWith({name: 'good', link: 'vless://good'});
+  expect(read().form.value).toBe('wrong://bad');
+  expect(toast).toHaveBeenCalledExactlyOnceWith('warning', 'Added 1, failed 1');
+  read().setNodeLink(Array(201).fill('vless://host').join('\n'));
+  expect(read().formValid).toBe(false);
+  expect(read().nodeLinkError).toBe('Use at most 200 links.');
+});
+it('stops a batch after closing its dialog without sending the next line', async () => {
+  const request = deferred<Node | null>();
+  store.addNode = vi.fn(() => request.promise);
+  read().addNode!();
+  read().setNodeLink('vless://first\nvless://second');
+  const sent = read().submit(vi.fn());
+  read().setDialog(null);
+  read().addNode!();
+  request.resolve({name: 'first'} as Node);
+  await sent;
+  expect(store.addNode).toHaveBeenCalledTimes(1);
+  expect(read().form.value).toBe('');
+  expect(read().batchErrors).toEqual([]);
 });

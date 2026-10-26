@@ -8,7 +8,7 @@ for (const width of [1024, 1280, 1440]) {
       // The connections table sits behind the traffic tab.
       await page.goto(`/#/${route}${route === 'connections' ? '?tab=list' : ''}`);
       if (!(await offered(page, route))) continue;
-      await expect(page.locator('.rp-content > .rp-page')).toBeVisible();
+      await expect(page.locator('.rp-content > .rp-page:visible')).toBeVisible();
       await expect(page.locator(`.rp-content ${loadingState}`)).toHaveCount(0);
       // Tables that sit behind a tab or a fold are opened first; the fit rule applies to all of them.
       if (route === 'dns') await page.getByRole('tab', {name: 'Cache', exact: true}).click();
@@ -16,7 +16,7 @@ for (const width of [1024, 1280, 1440]) {
       if (route === 'rules' && (await page.getByRole('tab', {name: 'Trace simulation', exact: true}).count())) {
         await page.getByRole('tab', {name: 'Trace simulation', exact: true}).click();
         // A name the demo DNS cache answers, so the evaluation table renders.
-        await page.getByLabel('Domain', {exact: true}).fill('api.telegram.org');
+        await page.getByRole('textbox', {name: 'Domain', exact: true}).fill('api.telegram.org');
         await page.getByRole('textbox', {name: 'Destination port', exact: true}).fill('443');
         await page.getByRole('button', {name: 'Run trace', exact: true}).click();
         await expect(page.getByRole('grid', {name: 'Rule evaluation 1'})).toBeVisible();
@@ -116,16 +116,26 @@ test('an unknown history entry is replaced so Back can reach the preceding page'
 test('first loads draw skeletons on every page', async ({page}) => {
   test.skip(isLive, 'holds the mock backend');
   await mockBackend(page);
-  let hold = true;
+  let first = '';
+  let held = 0;
+  let release = () => {};
+  let gate = Promise.resolve();
+  // Each first load is a fresh document marked by ?first=; same-origin reads carry that query in Referer,
+  // so only the current document's reads are held and none can outlive its document.
   await page.route(/\/api\/v1\/(?!capabilities|version)/, async route => {
-    if (hold) await new Promise(resolve => setTimeout(resolve, 1500));
+    const referer = await route.request().headerValue('referer');
+    if (referer && new URL(referer).searchParams.get('first') === first) {
+      held++;
+      await gate;
+    }
     await route.fallback();
   });
   await page.emulateMedia({reducedMotion: 'reduce'});
   for (const route of ['activity', 'policies', 'nodes', 'dns?tab=stats', 'settings', 'config']) {
-    hold = true;
-    await page.goto(`/#/${route}`);
-    await page.reload();
+    first = route;
+    held = 0;
+    gate = new Promise<void>(resolve => (release = resolve));
+    await page.goto(`/?first=${encodeURIComponent(route)}#/${route}`);
     const skeleton = page.locator(`.rp-content ${loadingState}`).first();
     await expect(skeleton, route).toBeVisible();
     await expect(page.locator('.rp-content .rp-empty[role=status]'), route).toHaveCount(0);
@@ -135,7 +145,8 @@ test('first loads draw skeletons on every page', async ({page}) => {
       return bar ? getComputedStyle(bar).animationName : card && getComputedStyle(card, '::after').animationName;
     });
     expect(shimmer, route).toBe('none');
-    hold = false;
+    await expect.poll(() => held, route).toBeGreaterThan(0);
+    release();
     await expect(page.locator(`.rp-content ${loadingState}`), route).toHaveCount(0, {timeout: 10_000});
   }
 });

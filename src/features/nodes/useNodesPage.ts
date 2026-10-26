@@ -39,13 +39,14 @@ import {useRefreshAll} from '../shared/useRefreshAll';
 import {useNodeTable} from './useNodeTable';
 import {useSubscriptionEditor, type SubscriptionEdit} from './useSubscriptionEditor';
 import {useDialogSession, useDraftGuard} from '../../shell/draft';
-import {errorText, noticeText, requestIdOf, type Notice} from '../../api/error';
+import {ApiError, errorText, noticeText, requestIdOf, type Notice} from '../../api/error';
 import {href, pickTab, tabQuery, within} from '../../shell/route';
 import {noNodeSources} from '../../api/selectors';
 import {offered} from '../../api/capabilities';
 import {diagnosticMessage, oneLine} from '../../i18n/backend';
 import {nodesTabs} from './nav';
 import type {SubscriptionDraft, SubscriptionFieldSet} from './SubscriptionFields';
+import {parseNodeLinks} from './batch';
 
 const blank: ProviderForm = {name: '', value: '', interval: '', agent: '', cache: null, route: ''};
 
@@ -74,10 +75,14 @@ export function useNodesPage({go, query}: PageProps) {
   const headerError = headerDuplicates.size ? t('nodes.xhttp.headerDuplicate') : null;
   const headerEdited = headers !== null && JSON.stringify(headers) !== JSON.stringify(xhttp?.headers ?? []);
   const session = useDialogSession();
+  const [batchProgress, setBatchProgress] = useState<string | null>(null);
+  const [batchErrors, setBatchErrors] = useState<string[]>([]);
   const submitting = useRef<NodeDialog | null>(null);
   const [pendingDialog, setPendingDialog] = useState<NodeDialog | null>(null);
   // Why the last submit did not land; `id` changes with each refusal so the alert takes focus again.
   const [problem, setProblem] = useState<Problem | null>(null);
+  const [refusedName, setRefusedName] = useState<string | null>(null);
+  const [refusedLink, setRefusedLink] = useState<string | null>(null);
   const intervalSeconds = draftInterval(form.interval);
   const resources = useCapabilities().data?.resources;
   const createOptions = resources?.providers.create_options;
@@ -87,14 +92,21 @@ export function useNodesPage({go, query}: PageProps) {
     : dialog?.kind === 'editNode'
       ? form.name !== dialog.entry.name || form.value !== dialog.entry.link
       : !!(form.name || form.value);
-  const guard = useDraftGuard(!!dialog && (edited || headerEdited), () => {
-    session.next();
-    setDialog(null);
-  });
+  const guard = useDraftGuard(
+    !!dialog && (edited || headerEdited),
+    () => {
+      session.next();
+      setDialog(null);
+    },
+    'config.draftNode'
+  );
   const open = useCallback(
     (next: NodeDialog) => {
       session.next();
       setForm(blank);
+      setBatchErrors([]);
+      setRefusedName(null);
+      setRefusedLink(null);
       setHeaders(null);
       setProblem(null);
       if (next.kind === 'editProvider')
@@ -125,6 +137,13 @@ export function useNodesPage({go, query}: PageProps) {
   // A subscription is edited in whichever source declares it, and only in dae text this page knows how to write.
   const version = useVersion().data;
   const daeText = engineOf(version).daeText;
+  const parsed = parseNodeLinks(
+    form.value,
+    (nodeList ?? []).map(node => node.name),
+    t,
+    engineOf(version).nodeLinkSchemes
+  );
+  const batch = dialog?.kind === 'node' && parsed.multiple ? parsed : null;
   const sources = useMemo(() => config.data?.sources ?? [], [config.data]);
   const isComplete = useCompleteness(sources);
   const declared = useMemo(() => {
@@ -254,7 +273,7 @@ export function useNodesPage({go, query}: PageProps) {
     };
   }, [query]);
   const submit = async (close: () => void) => {
-    if (!dialog || submitting.current) return;
+    if (!dialog || submitting.current || !formValid) return;
     submitting.current = dialog;
     setPendingDialog(dialog);
     const isCurrent = session.start();
@@ -294,6 +313,37 @@ export function useNodesPage({go, query}: PageProps) {
           return;
         }
         toast('positive', t('nodes.added', {name}), {action: viewNodes(created.id)});
+        return;
+      } else if (dialog.kind === 'node' && batch) {
+        const remaining = new Map(batch.rows.map(row => [row.id, row.link]));
+        const valid = batch.rows.filter(row => !row.error);
+        const errors: string[] = [];
+        let added = 0;
+        for (const [index, row] of valid.entries()) {
+          if (!isCurrent()) break;
+          setBatchProgress(t('nodes.addingBatch', {n: index + 1, total: valid.length}));
+          try {
+            if (!(await manage.addNode({name: row.name, link: row.link}))) break;
+            added++;
+            remaining.delete(row.id);
+          } catch (error) {
+            errors.push(`${row.name}: ${errorText(error, t)}`);
+          }
+        }
+        const failed = errors.length + batch.rows.filter(row => row.error).length;
+        toast(failed ? 'warning' : 'positive', t('nodes.batchAdded', {n: added, failed}));
+        if (isCurrent()) {
+          setForm(previous => ({
+            ...previous,
+            name: remaining.size === 1 ? batch.rows.find(row => remaining.has(row.id))!.name : previous.name,
+            value: [...remaining.values()].join('\n')
+          }));
+          setBatchErrors(errors);
+          if (!remaining.size) {
+            guard.clear();
+            close();
+          }
+        }
         return;
       } else if (dialog.kind === 'node') {
         const created = await manage.addNode({name: form.name.trim(), link: form.value.trim()});
@@ -358,10 +408,13 @@ export function useNodesPage({go, query}: PageProps) {
         close();
       }
     } catch (error) {
-      refuse(errorText(error, t), errorText(error, t, false), error);
+      if (isCurrent() && dialog.kind === 'node' && error instanceof ApiError && error.code === 'state_conflict') setRefusedName(form.name.trim());
+      else if (isCurrent() && dialog.kind === 'node' && error instanceof ApiError && error.code === 'unsupported_value') setRefusedLink(form.value.trim());
+      else refuse(errorText(error, t), errorText(error, t, false), error);
     } finally {
       submitting.current = null;
       setPendingDialog(null);
+      setBatchProgress(null);
     }
   };
   const removing = dialog?.kind === 'removeProvider' || dialog?.kind === 'removeNode';
@@ -392,16 +445,33 @@ export function useNodesPage({go, query}: PageProps) {
       : removal.blockers;
   const checkingRemoval = removal.checking;
   const nodeState = dialog?.kind === 'editNode' ? nodeEditState(sources, dialog.source, dialog.entry, nodeList ?? [], form, t) : null;
-  const nodeNameError = nodeState?.nameError ?? null;
-  const formValid =
-    dialog?.kind === 'editNode'
+  const nodeNameError =
+    nodeState?.nameError ??
+    (dialog?.kind === 'node' && form.name.trim() && (refusedName === form.name.trim() || nodeList?.some(node => node.name === form.name.trim()))
+      ? t('nodes.nameTaken')
+      : null);
+  const linkError = batch
+    ? batch.error
+    : dialog?.kind === 'node'
+      ? refusedLink === form.value.trim()
+        ? t('nodes.linkInvalid')
+        : nodeLinkError(form.value, t, engineOf(version).nodeLinkSchemes)
+      : (nodeState?.linkError ?? null);
+  const formValid = batch
+    ? !batch.error && batch.rows.some(row => !row.error)
+    : dialog?.kind === 'editNode'
       ? nodeState!.valid && !headerError
       : dialog?.kind === 'editProvider'
         ? subscriptionEdit.valid
         : dialog?.kind === 'provider'
           ? isBareName(form.name.trim()) && !!form.value.trim() && subscriptionUrlError(form.value, t) === null && !agentError && intervalSeconds !== null
           : dialog?.kind === 'node'
-            ? form.name.trim() !== '' && !!form.value.trim() && nodeFormReason('node', form.name, form.value, t) === null && !headerError
+            ? form.name.trim() !== '' &&
+              !!form.value.trim() &&
+              nodeFormReason('node', form.name, form.value, t) === null &&
+              !nodeNameError &&
+              !linkError &&
+              !headerError
             : true;
   const subscription: SubscriptionDraft = {name: form.name, url: form.value, interval: form.interval, agent: form.agent, cache: form.cache, route: form.route};
   // A new subscription shows each option the backend lists, with its default preselected or as the placeholder; an
@@ -498,15 +568,18 @@ export function useNodesPage({go, query}: PageProps) {
     },
     problem,
     form,
+    batch,
+    batchErrors,
     setForm: (next: typeof form) => {
       if (submitting.current !== dialog) setForm(next);
     },
     setNodeLink: (value: string) => {
       if (submitting.current === dialog) return;
       setHeaders(null);
+      setBatchErrors([]);
       setForm(previous => ({...previous, value}));
     },
-    xhttp: xhttp && {...xhttp, headers: headerRows},
+    xhttp: !batch && xhttp && {...xhttp, headers: headerRows},
     headerDuplicates,
     setXhttp: (change: XhttpChange) => {
       if (submitting.current === dialog) return;
@@ -517,23 +590,26 @@ export function useNodesPage({go, query}: PageProps) {
     dialogTitle,
     formValid,
     nodeNameError,
-    nodeLinkError: nodeState?.linkError ?? (dialog?.kind === 'node' ? nodeLinkError(form.value, t) : null),
-    formReason:
-      dialog?.kind === 'editNode'
+    nodeLinkError: linkError,
+    formReason: batch
+      ? batch.error
+      : dialog?.kind === 'editNode'
         ? (nodeState!.reason ?? headerError)
         : dialog?.kind === 'editProvider'
           ? // A name error is shown on its field alone.
             subscriptionEdit.reason
-          : (nodeFormReason(dialog?.kind, form.name, form.value, t) ?? headerError),
+          : (nodeNameError ?? linkError ?? nodeFormReason(dialog?.kind, form.name, form.value, t) ?? headerError ?? agentError ?? intervalError),
     submit,
     pending: dialog !== null && pendingDialog === dialog,
     // A write abandoned by Cancel still holds the node actions until it settles, so no dialog can submit meanwhile.
     submitting: pendingDialog !== null,
-    submitLabel: removing
-      ? t('nodes.remove', {name: dialog.item.name})
-      : dialog?.kind === 'editProvider' || dialog?.kind === 'editNode'
-        ? t('policy.save')
-        : t('nodes.add'),
+    submitLabel:
+      batchProgress ??
+      (removing
+        ? t('nodes.remove', {name: dialog.item.name})
+        : dialog?.kind === 'editProvider' || dialog?.kind === 'editNode'
+          ? t('policy.save')
+          : t('nodes.add')),
     editOptions: subscriptionEdit.options,
     renameGroups: subscriptionEdit.renameGroups,
     referenced: blockers.length && blockedTag !== null ? {groups: formatList(lang, blockers), name: blockedTag, href: href('policies')} : null,

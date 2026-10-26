@@ -1,9 +1,9 @@
 import './install';
 import {lazy, Suspense, useCallback, useState, type ComponentProps, type ReactNode} from 'react';
 import {I18nProvider, RouterProvider} from 'react-aria-components';
-import {LangContext, LOCALE, RewordingContext, useT, type Lang} from '../i18n';
+import {LangContext, LOCALE, RewordingContext, useT, withCatalogue, type Lang, type Key} from '../i18n';
 import {ConfirmDialog, Toasts, ErrorMessage, Loading, PageSkeleton} from '../ui/ui';
-import {DraftContext, useDraftGuard} from './draft';
+import {DraftContext, draftLabels, useDraftGuard} from './draft';
 import {useModeDraft} from '../features/shared/useModeDraft';
 import {searchDialog} from './search/load';
 import {CountryFlagsContext, FlagEditingContext} from '../ui/NodeName';
@@ -61,7 +61,7 @@ export function Shell({lang: initial}: {lang: Lang}) {
                     mac={mac}
                   />
                 </DraftContext.Provider>
-                <DiscardDialog isOpen={confirming} discard={discard} cancel={cancel} />
+                <DiscardDialog labels={draftLabels(draft.setDirty)} isOpen={confirming} discard={discard} cancel={cancel} />
                 {searchOpen && (
                   <LoadBoundary>
                     <Suspense fallback={null}>
@@ -96,15 +96,17 @@ export function Shell({lang: initial}: {lang: Lang}) {
 // sign-in page still warns before the reload that signing in again starts.
 function ModeDraftGuard() {
   const [draft, setDraft] = useModeDraft();
-  useDraftGuard(draft !== null, () => setDraft(null));
+  useDraftGuard(draft !== null, () => setDraft(null), 'act.mode');
   return null;
 }
 
-function DiscardDialog({isOpen, discard, cancel}: {isOpen: boolean; discard: () => void; cancel: () => void}) {
+function DiscardDialog({isOpen, discard, cancel, labels}: {isOpen: boolean; discard: () => void; cancel: () => void; labels: Key[]}) {
   const t = useT();
   return (
     <ConfirmDialog title={t('config.discardTitle')} isOpen={isOpen} onCancel={cancel} confirmLabel={t('config.discard')} onConfirm={discard}>
-      <p className="rp-label">{t('config.discardHelp')}</p>
+      <p className="rp-label">
+        {t('config.discardHelp', {drafts: (labels.length ? labels : ['config.draftOther' as const]).map(key => t(key)).join(t('ui.listSeparator'))})}
+      </p>
     </ConfirmDialog>
   );
 }
@@ -117,7 +119,7 @@ function ToastHost({placement, route}: {placement: ToastPlacement; route: string
 
 // The signed-in frame shares the Activity page's chunk. A tab that expects to be let in requests it at startup beside
 // the capabilities read; any other tab requests it once the backend accepts it, so the sign-in page does not load it.
-const frame = preloadable<ComponentProps<typeof Frame>>(() => import('./Frame').then(module => ({default: module.Frame})));
+const frame = preloadable<ComponentProps<typeof Frame>>(withCatalogue('activity', () => import('./Frame').then(module => ({default: module.Frame}))));
 export const preloadFrame = () => void frame.preload().catch(() => undefined);
 
 // What startup shows before the shell: the brand over the given content. The shell shows the same while the frame loads.
@@ -159,8 +161,8 @@ function ShellFrame(props: FrameProps) {
   );
 }
 
-function SignIn({lang, pickLang, ap, route, view, content}: FrameProps & {view: ShellModel; content: Extract<ShellModel['content'], {kind: 'login'}>}) {
-  const {menu, paletteSections} = useShellFrame(lang, pickLang, ap, route);
+function SignIn({lang, pickLang, ap, view, content}: FrameProps & {view: ShellModel; content: Extract<ShellModel['content'], {kind: 'login'}>}) {
+  const {menu, paletteSections} = useShellFrame(lang, pickLang, ap);
   return (
     <Suspense fallback={<Loading />}>
       <Login

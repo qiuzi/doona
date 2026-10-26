@@ -10,7 +10,7 @@ import {storageKeys} from '../../api/storage';
 import {toast} from '../../ui/ui';
 import {readSettings} from '../../shell/preferences';
 import {useDraftGuard} from '../../shell/draft';
-import {parseHash, replaceRoute} from '../../shell/route';
+import {parseHash, replaceAddress, replaceRoute} from '../../shell/route';
 import {defaultRoute, type RoutePath} from '../../shell/routes';
 import {useConnectionTest} from './connectionTest';
 import {cardHeadingId} from './nav';
@@ -36,11 +36,15 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
   const {pending, running, cancel: cancelProbe, run: runProbe} = useConnectionTest();
   // Pairing links also fill an already-open form without saving the credentials.
   const dirty = api !== defaultApi || token !== saved.token;
-  const guard = useDraftGuard(dirty, () => {
-    setApi(defaultApi);
-    setToken(saved.token);
-    setPaired(false);
-  });
+  const guard = useDraftGuard(
+    dirty,
+    () => {
+      setApi(defaultApi);
+      setToken(saved.token);
+      setPaired(false);
+    },
+    'config.draftBackend'
+  );
   const [lastQuery, setLastQuery] = useState<string | null>(null);
   if (lastQuery !== query) {
     setLastQuery(query);
@@ -151,6 +155,10 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
     }
   })();
   const validate = (value: string) => {
+    if (!value.trim()) {
+      setInvalid(true);
+      return null;
+    }
     try {
       const base = normalizeApi(value);
       setInvalid(false);
@@ -190,7 +198,7 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
     } catch {
       /* Storage can be unavailable. */
     }
-    if (destination) replaceRoute(destination.route, destination.query);
+    if (destination) replaceAddress(destination.route, destination.query);
     // Rebuild requests, SSE subscriptions, and module-level observation state for the new backend.
     location.reload();
   };
@@ -204,7 +212,7 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
     return active ? saved.profiles.map(item => (item.id === active.id ? profile : item)) : [profile];
   };
   const save = () => {
-    if (staleLogin) return;
+    if (staleLogin || invalid) return;
     let profiles = editedProfiles();
     if (profiles && loginProfile !== null) {
       try {
@@ -226,8 +234,18 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
       if (loginProfile === saved.activeId && back?.startsWith('#/')) {
         const destination = parseHash(back);
         persist(profiles, active?.id ?? profiles[0].id, destination);
-      } else persist(profiles, active?.id ?? profiles[0].id, saved.api === null ? {route: startPage, query: ''} : undefined);
+      } else
+        persist(
+          profiles,
+          active?.id ?? profiles[0].id,
+          saved.api === null || dirty ? {route: startPage === 'settings' ? defaultRoute : startPage, query: ''} : undefined
+        );
     } else toast('negative', t('settings.invalidUrl'));
+  };
+  // A first run may keep the built-in demo instead: saved as its own profile, it ends the first run as a backend would.
+  const keepDemo = () => {
+    const profile = {id: uuid(), name: t('shell.backend.demo'), api: DEMO_API, token: ''};
+    persist([profile], profile.id, {route: startPage === 'settings' ? defaultRoute : startPage, query: ''});
   };
   const [switchId, setSwitchId] = useState<string | null>(null);
   const switchProfile = (id: string) => {
@@ -309,6 +327,8 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
     dirty,
     invalid,
     result,
+    // The last test reached the backend in the form, so saving it is the next step.
+    reachable: result?.key === 'settings.reachable',
     pending,
     saving,
     save,
@@ -316,6 +336,7 @@ export function useBackendForm(query: string, startPage: RoutePath = defaultRout
     confirmSwitch,
     switchPending: switchId !== null,
     cancelSwitch: () => setSwitchId(null),
-    testConnection
+    testConnection,
+    keepDemo
   };
 }

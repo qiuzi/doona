@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import {expect, paletteBoxes, test} from './fixtures';
+import {expect, paletteBoxes, test, mockBackend, expectHiddenPagesIdle, fulfillStream, settleFrames} from './fixtures';
 
 const flavours = ['glass', 'clear', 'frosted', 'tinted'] as const;
 // Glass and Clear draw the sidebar and the bar's capsules as glass of their own; Frosted and Tinted share one chrome sheet.
@@ -260,7 +260,8 @@ test.describe('glass lens', () => {
     for (const route of ['logs', 'events']) {
       await page.goto(`/#/${route}`);
       await expect(page.locator('html')).toHaveAttribute('data-lens', '');
-      await expect(page.locator('.rp-table[data-flow]')).toBeVisible();
+      await expect(page.locator('.rp-table[data-flow]:visible')).toBeVisible();
+      await expect(page.locator('.rp-panel, .rp-drawer').filter({visible: false})).toHaveCount(0);
       await expect(page.locator('.rp-floating-frame .rp-floating-panel')).toBeVisible();
       const panel = (await surface(page, '.rp-floating-frame .rp-floating-panel')).filter;
       expect(panel).toContain('url("#doona-lens")');
@@ -365,6 +366,8 @@ test('glass floats the top bar capsules and the sidebar as the card glass', asyn
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-flavour', flavour);
     await expect(page.locator(pageCard).first()).toBeVisible();
+    // Dashboard sections pack their cards in the frame after they mount.
+    await settleFrames(page);
     return page.locator(pageCard).evaluateAll(cards => cards.slice(0, 8).map(card => JSON.stringify(card.getBoundingClientRect())));
   };
   await page.goto('/#/activity');
@@ -484,4 +487,24 @@ test.describe('reduce transparency and increase contrast', () => {
           expect(await surface(page, '.rp-table[data-flow]')).toMatchObject(opaque);
         }
       });
+});
+
+test('a retained Glass log page holds no panel and stops reconnecting its stream', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('doona-palette', 'glass/glass'));
+  const {api, requests} = await mockBackend(page);
+  const runtime = await api.runtime();
+  await page.route('**/api/v1/logs?*', route => {
+    requests.push(route.request());
+    return fulfillStream(route, [
+      {id: 'ready:0', event: 'stream.ready', data: {instance_id: runtime.instance_id, observed_at: runtime.observed_at}},
+      {id: 'log:1', event: 'log', data: {ts: runtime.observed_at, level: 'info', target: 'honk::dns', message: 'DNS answered', fields: null}}
+    ]);
+  });
+  await page.clock.install();
+  await page.goto('/#/logs');
+  await expect(page.getByRole('rowheader').first()).toBeVisible();
+  await page.locator('.rp-nav[href="#/settings"]').click();
+  await expect(page.locator('main h1')).toHaveText('Settings');
+  await expect(page.locator('.rp-page').filter({visible: false})).not.toHaveCount(0);
+  await expectHiddenPagesIdle(page, requests, /\/logs$/);
 });

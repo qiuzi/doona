@@ -100,6 +100,7 @@ export const test = base.extend<{storage: Record<string, string>; signedIn: stri
         if (localStorage.getItem('doona-session') === null) localStorage.setItem('doona-session', session);
       }, demoSession(signedIn));
     await use(page);
+    await expect(page.locator('.rp-panel, .rp-drawer').filter({visible: false}), 'Hidden pages hold no open detail panel').toHaveCount(0);
     expect(controls, 'Live observation suite sent control requests').toEqual([]);
     expect(errors, 'Browser errors').toEqual([]);
   }
@@ -165,7 +166,18 @@ export async function scrollTableToEnd(grid: Locator) {
     .not.toBe('none');
 }
 
-export const detail = (page: Page) => page.locator('.rp-panel, .rp-drawer');
+// Call after leaving a page, with its resource paths and an installed clock.
+export async function expectHiddenPagesIdle(page: Page, requests: Request[], paths: RegExp) {
+  await expect(page.locator('.rp-panel, .rp-drawer').filter({visible: false})).toHaveCount(0);
+  const reads = () => requests.filter(request => paths.test(new URL(request.url()).pathname)).length;
+  const before = reads();
+  expect(before, 'The hidden page read its resources while shown').toBeGreaterThan(0);
+  await page.clock.fastForward(61_000);
+  await settleFrames(page);
+  expect(reads(), 'Hidden pages stop requesting their resources').toBe(before);
+}
+
+export const detail = (page: Page) => page.locator('.rp-panel, .rp-drawer').filter({visible: true});
 // A panel's secondary actions sit in its trailing More menu. Opens it and returns the item; the menu itself is
 // portalled out of the panel.
 export async function moreItem(scope: Locator, name: string | RegExp, menu = 'More actions') {
@@ -324,6 +336,7 @@ export async function mockBackend(page: Page, options: {faults?: boolean; includ
       if (handlers[`${method} ${path}`]) result = await handlers[`${method} ${path}`](request);
       else if (path === '/api') result = await api.discovery();
       else if (method === 'GET' && reads[path]) result = await reads[path](request);
+      else if (method === 'GET' && parts[0] === 'flows') result = await api.flow(parts[1]);
       else if (method === 'GET' && parts[0] === 'groups') result = await api.group(parts[1]);
       else if (method === 'GET' && parts[0] === 'operations') result = await api.operation(parts[1]);
       else if (method === 'GET' && parts[0] === 'config' && parts[1] === 'sources') {

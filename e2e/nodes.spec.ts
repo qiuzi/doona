@@ -12,7 +12,7 @@ test.beforeAll(loadCatalogues);
 
 type ProbeResultItem = ProbeResult['results'][number];
 
-const nodeRows = (page: import('@playwright/test').Page) => page.locator('.rp-table').first().locator('[role=row][data-key]');
+const nodeRows = (page: import('@playwright/test').Page) => page.locator('.rp-table:visible').first().locator('[role=row][data-key]');
 
 const rows = (table: Locator) => table.locator('[role=rowgroup]:last-child [role=row][data-key]');
 // The node sources, as cards.
@@ -94,9 +94,9 @@ test('a share link becomes an inline node and can be removed again', async ({pag
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name').fill('hk-03');
   await dialog.getByLabel('Node link').fill('foo://nope');
-  await dialog.getByRole('button', {name: 'Add', exact: true}).click();
-  await expect(dialog.getByRole('alert')).toContainText('Unsupported value');
-  await expect(dialog.getByRole('alert')).toContainText('Unsupported share link scheme "foo"');
+  // The link is refused at its field, before anything is sent, and Add stays off until it is fixed.
+  await expect(dialog.locator('.rp-field-error', {hasText: 'The node link must be a protocol://'})).toBeVisible();
+  await expect(dialog.getByRole('button', {name: 'Add', exact: true})).toBeDisabled();
   await dialog.getByLabel('Node link').fill('vless://uuid@example.com:443?security=tls#hk-03');
   await dialog.getByRole('button', {name: 'Add', exact: true}).click();
   await expect(page.locator('.rp-toast.positive', {hasText: 'hk-03 added'})).toBeVisible();
@@ -108,7 +108,7 @@ test('a share link becomes an inline node and can be removed again', async ({pag
   await expect(list).toHaveCount(5);
   // The management write landed in the main source as a new generation.
   await page.locator('.rp-nav[href="#/config"]').click();
-  await expect(page.locator('.rp-toolbar').first()).toContainText('42');
+  await expect(page.locator('.rp-toolbar:visible').first()).toContainText('42');
 });
 
 for (const transport of ['xhttp', 'splithttp'])
@@ -588,7 +588,7 @@ test('a subscription is added with its refresh interval, User-Agent and cache se
   await dialog.getByRole('button', {name: 'Auto-update'}).click();
   await page.getByRole('option', {name: 'Every 6 hours', exact: true}).click();
   await dialog.getByLabel('User-Agent').fill('agent\u00e9');
-  await expect(dialog.getByText('Up to 256 printable ASCII characters')).toBeVisible();
+  await expect(dialog.locator('.rp-field-error', {hasText: 'Up to 256 printable ASCII characters'})).toBeVisible();
   await expect(dialog.getByRole('button', {name: 'Add', exact: true})).toBeDisabled();
   await dialog.getByLabel('User-Agent').fill('clash.meta');
   await dialog.getByText('Cache the subscription').click();
@@ -801,6 +801,13 @@ test('group tags fit their column at 1440 px, the rest behind a +N tag', async (
   await page.setViewportSize({width: 1440, height: 900});
   await page.goto('/#/nodes');
   await page.evaluate(() => document.fonts.ready);
+  await expectFittedGroupTags(page);
+  const link = page.locator('.rp-tags[data-fit]').getByRole('link').first();
+  await link.locator('xpath=ancestor::*[@role="row"]').focus();
+  for (let i = 0; i < 8 && !(await link.evaluate(el => el === document.activeElement)); i++) await page.keyboard.press('ArrowRight');
+  await expect(link).toBeFocused();
+  await page.evaluate(() => document.fonts.dispatchEvent(new Event('loadingdone')));
+  await expect(link).toBeFocused();
   await expectFittedGroupTags(page);
 });
 
@@ -1212,7 +1219,7 @@ test('the time format setting switches a source expiry and the log clock between
     ])
   );
   const expiry = () => sourceCards(page).first().locator('.rp-kv > div').filter({hasText: 'Expires'}).locator('.v');
-  const marks = page.locator('.rp-heatmap .times .ends span');
+  const marks = page.locator('.rp-heatmap:visible .times .ends span');
   const pick = async (name: string) => {
     await page.goto('/#/settings?tab=appearance');
     await page.getByRole('button', {name: /Time format$/}).click();
@@ -1378,7 +1385,7 @@ test('a latency row opens its node in the list', async ({page}) => {
     const params = new URLSearchParams(search);
     return path === '/nodes' && params.get('provider') === node.provider_id && params.get('q') === name;
   });
-  await expect(page.getByRole('tab', {name: 'Nodes', exact: true})).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', {name: 'List', exact: true})).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('searchbox', {name: 'Search nodes', exact: true})).toHaveValue(name);
   await expect(page.getByRole('grid').last()).toContainText(name);
 });
@@ -1527,11 +1534,12 @@ test('a node write conflict names its cause, and only a delete without groups re
   await confirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
   await page.getByRole('button', {name: 'Paste node link', exact: true}).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill(node.name);
+  await dialog.getByLabel('Name').fill('hk-new');
   await dialog.getByLabel('Node link').fill('vless://uuid@example.com:443?security=tls#dup');
   await dialog.getByRole('button', {name: 'Add', exact: true}).click();
-  await expect(dialog.getByRole('alert')).toContainText('A resource with this name already exists');
-  await expect(dialog.getByRole('alert')).not.toContainText('changed or another write');
+  // A name clash the list did not show is reported at the Name field, not as a changed configuration.
+  await expect(dialog.locator('.rp-field-error', {hasText: 'A node already uses this name.'})).toBeVisible();
+  await expect(dialog).not.toContainText('changed or another write');
 });
 
 test("a subscription's URL is edited where its entry is written", async ({page}) => {
@@ -2166,4 +2174,70 @@ test('QUIC nodes fall back to HTTP once and omit TCP connect from options', asyn
   await expect(dialog.getByRole('button', {name: /Kind/})).toContainText('HTTP');
   await dialog.getByRole('button', {name: /Kind/}).click();
   await expect(page.getByRole('option')).toHaveText(['HTTP', 'DNS (TCP)', 'DNS (UDP)', 'DNS (TCP + UDP)']);
+});
+
+test('pastes several node links and keeps a failed line for retry on a phone', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  const {api, handlers} = await mockBackend(page);
+  let refuse = true;
+  handlers['POST nodes'] = request => {
+    const body = request.postDataJSON();
+    if (body.name === 'batch-second' && refuse) {
+      refuse = false;
+      throw new ApiError(422, 'unsupported_value', 'Link refused');
+    }
+    return api.createNode(body);
+  };
+  await page.goto('/#/nodes?provider=inline');
+  await page.getByRole('button', {name: 'Paste node link', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  const input = dialog.getByLabel('Node link', {exact: true});
+  await input.fill('wrong://host');
+  await expect(dialog.locator('.rp-field-error')).toHaveText(translate('en', 'nodes.linkInvalid'));
+  await input.fill(Array.from({length: 30}, (_, index) => `wrong://host#invalid-${index}`).join('\n'));
+  const excluded = dialog.getByText('Excluded: 30', {exact: true});
+  const preview = dialog.getByRole('grid', {name: 'Node links'});
+  const body = dialog.locator('.rp-dialog-body');
+  await expect(preview.getByRole('row').nth(1)).toContainText('Invalid link');
+  const inputBox = await box(input);
+  const excludedBox = await box(excluded);
+  expect(inputBox.y + inputBox.height).toBeLessThanOrEqual(excludedBox.y);
+  expect(excludedBox.y + excludedBox.height).toBeLessThanOrEqual((await box(preview)).y);
+  await expect.poll(() => body.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  for (const name of ['Cancel', 'Add']) await expect(dialog.getByRole('button', {name, exact: true})).toBeInViewport({ratio: 1});
+  await body.evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+  });
+  for (const name of ['Cancel', 'Add']) await expect(dialog.getByRole('button', {name, exact: true})).toBeInViewport({ratio: 1});
+  // A phone has no hover; the short reason carries the full message as its tip for pointer devices.
+  await expect(preview.getByText('Invalid link', {exact: true}).first()).toHaveAttribute('data-tip', '');
+  await dialog.getByLabel('Node link', {exact: true}).fill('vless://uuid@example.com:443#batch-first\nvless://uuid@example.com:443#batch-second');
+  await expect(dialog.getByRole('textbox', {name: 'Name', exact: true})).toHaveCount(0);
+  await expect(dialog.getByRole('row', {name: /batch-first/})).toBeVisible();
+  await dialog.getByRole('button', {name: 'Add', exact: true}).click();
+  await expect(page.locator('.rp-toast')).toContainText('Added 1, failed 1');
+  await expect(dialog.getByLabel('Node link', {exact: true})).toHaveValue('vless://uuid@example.com:443#batch-second');
+  await expect(dialog.locator('.rp-field-error')).toContainText('Link refused');
+  await dialog.getByRole('button', {name: 'Add', exact: true}).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(nodeRows(page).filter({hasText: 'batch-'})).toHaveCount(2);
+});
+
+test('tests all filtered nodes and sorts by latency once', async ({page}) => {
+  const {requests} = await mockBackend(page);
+  await page.goto('/#/nodes?provider=inline');
+  await page.getByRole('button', {name: /Group$/}).click();
+  await page.getByRole('option', {name: 'gaming', exact: true}).click();
+  const table = page.locator('.rp-table').first();
+  await expect(rows(table)).toHaveCount(2);
+  const ids = await rows(table).evaluateAll(items => items.map(item => item.getAttribute('data-key')));
+  expect(ids).toHaveLength(2);
+  await page.getByRole('button', {name: 'Test all', exact: true}).click();
+  await expect(page.locator('.rp-toast')).toContainText('Tested 2, unavailable');
+  const probes = requests.filter(request => request.method() === 'POST' && request.url().endsWith('/probes'));
+  expect(probes.map(request => request.postDataJSON().target.node_id).sort()).toEqual(ids.sort());
+  await expect(table.getByRole('columnheader', {name: /^Latency/})).toHaveAttribute('aria-sort', 'ascending');
+  await table.getByRole('columnheader', {name: /^Node/}).click();
+  await expect(table.getByRole('columnheader', {name: /^Node/})).toHaveAttribute('aria-sort', 'ascending');
+  await expect(page.getByRole('button', {name: 'Test all', exact: true})).toBeEnabled();
 });

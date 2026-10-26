@@ -1,7 +1,21 @@
 import {useCallback, useMemo} from 'react';
 import {LogActivity} from './Activity';
 import {useT} from '../../i18n';
-import {ActionGroup, Button, DataTable, ErrorMessage, Kv, LabeledSelect, Light, Switch, TextField, TextTooltip, type TableColumn, Toolbar} from '../../ui/ui';
+import {
+  ActionGroup,
+  Button,
+  ConfirmDialog,
+  DataTable,
+  ErrorMessage,
+  Kv,
+  LabeledSelect,
+  Light,
+  Switch,
+  TextField,
+  TextTooltip,
+  type TableColumn,
+  Toolbar
+} from '../../ui/ui';
 import {useLogs} from './useLogs';
 import {logRowText} from './view';
 import {useCopyRecord} from '../shared/useCopyRecord';
@@ -90,27 +104,32 @@ export function Logs({go}: PageProps) {
   );
   return (
     <div className="rp-page">
-      <Toolbar page>
-        <LabeledSelect side label={t('log.level')} value={vm.level} onChange={vm.setLevel} items={vm.levels} />
-        {vm.filtersTarget && (
-          <TextField search label={t('log.target')} value={vm.target} width={240} placeholder={t('log.targetPlaceholder')} onChange={vm.setTarget} />
-        )}
-        <Switch isSelected={vm.paused} onChange={vm.setPaused}>
-          {t('log.pause')}
-        </Switch>
-        <Light small tone={vm.status.tone}>
-          {vm.status.text}
-        </Light>
+      <ConfirmDialog {...vm.confirmClear} title={t('log.clear')} confirmLabel={t('log.clear')}>
+        <p className="rp-label">{t('log.clearHelp')}</p>
+      </ConfirmDialog>
+      <div className="rp-col">
+        <Toolbar page>
+          <LabeledSelect side label={t('log.level')} value={vm.level} onChange={vm.setLevel} items={vm.levels} />
+          {vm.filtersTarget && (
+            <TextField search label={t('log.target')} value={vm.target} width={160} placeholder={t('log.targetPlaceholder')} onChange={vm.setTarget} />
+          )}
+          <Switch isSelected={vm.paused} onChange={vm.setPaused}>
+            {t('log.pause')}
+          </Switch>
+          <Light small tone={vm.status.tone}>
+            {vm.status.text}
+          </Light>
+          <span className="rp-grow" />
+          <ActionGroup
+            actions={[
+              {id: 'clear', label: t('log.clear'), isDisabled: !vm.rows.length, onAction: vm.clear},
+              {id: 'export', label: t('log.export'), icon: <Download />, isDisabled: !vm.rows.length, onAction: vm.export},
+              ...(vm.openRecording ? [{id: 'recording', label: t('ui.recordingSettings'), onAction: vm.openRecording}] : [])
+            ]}
+          />
+        </Toolbar>
         {vm.recordedText && <span className="rp-label">{vm.recordedText}</span>}
-        <span className="rp-grow" />
-        <ActionGroup
-          actions={[
-            {id: 'clear', label: t('log.clear'), isDisabled: !vm.rows.length, onAction: vm.clear},
-            {id: 'export', label: t('log.export'), icon: <Download />, isDisabled: !vm.rows.length, onAction: vm.export},
-            ...(vm.openRecording ? [{id: 'recording', label: t('ui.recordingSettings'), onAction: vm.openRecording}] : [])
-          ]}
-        />
-      </Toolbar>
+      </div>
       <ErrorMessage error={vm.error} onRetry={vm.retry} />
       <LogActivity records={vm.records} offered={vm.offered} minimum={vm.level} setMinimum={vm.setLevel} waiting={vm.loading} />
       <DataTable label={t('nav.logs')} stream flow rows={vm.rows} loading={vm.loading} empty={vm.empty} cols={columns} detail={detail} />

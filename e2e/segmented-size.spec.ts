@@ -7,8 +7,13 @@ import {defaultWidget, defaults, type Layout} from '../src/shell/widgets/layout'
 // the widget panel and while editing the dashboard.
 test.beforeAll(loadCatalogues);
 const t = (key: Parameters<typeof translate>[1]) => translate('zh-TW', key);
-// The default panel with a group switch, whose network choice is a segmented control too.
-const panelLayout = (docked: boolean): Layout => ({...defaults(), items: [...defaults().items, defaultWidget('group')], docked: docked || undefined});
+// The default panel, opened, with a group switch, whose network choice is a segmented control too.
+const panelLayout = (docked: boolean): Layout => ({
+  ...defaults(),
+  collapsed: false,
+  items: [...defaults().items, defaultWidget('group')],
+  docked: docked || undefined
+});
 const save = (page: Page, layout: Layout) =>
   page.addInitScript(value => {
     if (!localStorage.getItem('doona-widgets')) localStorage.setItem('doona-widgets', JSON.stringify(value));
@@ -80,7 +85,7 @@ for (const [width, phone] of [
         await expect(page.locator('.rp-content h1')).toBeVisible();
         await expect(page.locator(`.rp-content ${loadingState}`)).toHaveCount(0);
         await page.evaluate(() => document.fonts.ready);
-        const tabs = page.locator('.rp-content [data-page-tabrow] [role=tab]');
+        const tabs = page.locator('.rp-content [data-page-tabrow] [role=tab]:visible');
         const count = await tabs.count();
         for (let index = -1; index < count; index++) {
           if (index >= 0) await tabs.nth(index).click();

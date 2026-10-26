@@ -84,7 +84,8 @@ test('another page opens at its top, while a change within the page keeps the sc
   expect(await page.evaluate(() => scrollY)).toBe(400);
   await bar(page).getByRole('link', {name: 'Monitor'}).click();
   await expect(page).toHaveURL(/#\/connections$/);
-  await expect(page.locator('.rp-content > *').first()).toBeVisible();
+  // The page switch commits after the address changes.
+  await expect(page.getByRole('heading', {level: 1})).toHaveText('Connections');
   // Tall enough that keeping the old offset would have left it at 400; WebKit fills the rows in a little later. A live
   // backend may have no connections to fill the page.
   if (!isLive) await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 400)).toBe(true);
@@ -342,7 +343,7 @@ for (const [scheme, palette] of [
     test('tabs contain wrapped labels and their selection marker at phone width', async ({page}) => {
       for (const route of ['rules', 'config']) {
         await page.goto('/#/' + route);
-        const bar = page.locator('.rp-tabbar').first();
+        const bar = page.locator('.rp-tabbar:visible').first();
         await expect(bar.getByRole('tab').first()).toBeVisible();
         const bounds = await bar.getByRole('tab').evaluateAll(tabs =>
           tabs.map(tab => {
@@ -519,7 +520,7 @@ test.describe('360px actions', () => {
       await page.goto(`/#/${route}`);
       const content = page.locator('.rp-content');
       // The search fields carry a Clear button of their own, and the DNS log repeats Load older records at its end.
-      const action = (name: string) => content.locator('button.rp-btn:not(.rp-narrow-only button)').filter({hasText: new RegExp(`^${name}$`)});
+      const action = (name: string) => content.locator('button.rp-btn:not(.rp-narrow-only button)').filter({hasText: new RegExp(`^${name}$`), visible: true});
       await expect(action(visible)).toBeVisible();
       for (const name of collapsed) await expect(action(name)).toBeHidden();
       await content.getByRole('button', {name: 'More actions'}).click();
@@ -528,7 +529,7 @@ test.describe('360px actions', () => {
       await page.keyboard.press('Escape');
     }
     await page.goto('/#/logs');
-    await expect(page.locator('.rp-table [role=row]').nth(1)).toBeVisible();
+    await expect(page.locator('.rp-table:visible [role=row]').nth(1)).toBeVisible();
     await page.locator('.rp-content').getByRole('button', {name: 'More actions'}).click();
     const download = page.waitForEvent('download');
     await page.getByRole('menuitem', {name: 'Export'}).click();
@@ -606,11 +607,11 @@ test('the outbound mode keeps Apply disabled without a line until a mode is pick
   await expect(apply).toBeEnabled();
 });
 
-test('the profile actions say a profile is created by saving the backend', async ({page}) => {
+test('a first run shows no profile actions until a backend is saved', async ({page}) => {
   test.skip(isLive, 'A live run starts from a saved profile');
   await page.goto('/#/settings');
-  await expectReason(page, page.getByRole('button', {name: 'Rename profile', exact: true}), 'No profile yet; saving the backend creates one');
-  await expect(page.getByRole('button', {name: 'Delete profile', exact: true})).toHaveAccessibleDescription('No profile yet; saving the backend creates one');
+  await expect(page.getByRole('button', {name: 'Use demo data', exact: true})).toBeVisible();
+  for (const name of ['Add profile', 'Rename profile', 'Delete profile']) await expect(page.getByRole('button', {name, exact: true})).toHaveCount(0);
 });
 
 test('the route trace says what it lacks until a destination and port are given', async ({page}) => {
