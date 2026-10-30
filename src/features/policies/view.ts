@@ -22,7 +22,7 @@ export function groupConfigFields(group: Group): Array<[Key | MessageRef, string
       if (typeof value === 'boolean') return [label, {key: value ? 'ui.yes' : 'ui.no'}];
       if (typeof value === 'number' && units[key]) return [label, {key: units[key], params: {n: value}}];
       if (key === 'default_member_id') return [label, group.members.find(member => member.id === value)?.name ?? String(value)];
-      return [label, String(value)];
+      return [label, typeof value === 'object' ? JSON.stringify(value) : String(value)];
     });
 }
 
@@ -160,8 +160,8 @@ export function memberViews(members: Array<Group['members'][number] & {health?: 
 // Which filter a group falls under: manual when the backend runs it as a selector, whose member is picked by hand, and
 // automatic for every other policy it lists. The contract's kind is honk's own reading of the policy, so a spelling
 // doona does not know still lands on the right side.
-export type GroupKind = 'manual' | 'auto';
-export type KindFilter = GroupKind | 'all';
+type GroupKind = 'manual' | 'auto';
+type KindFilter = GroupKind | 'all';
 export const groupKind = (policy: Pick<Group['policy'], 'kind'>): GroupKind => (policy.kind === 'selector' ? 'manual' : 'auto');
 // The filter a query asks for; anything else shows every group.
 export const kindFilter = (value: string | null): KindFilter => (value === 'manual' || value === 'auto' ? value : 'all');

@@ -2,7 +2,7 @@ import {nodeProbeSupport} from '../src/dae/probes';
 import type {Api} from '../src/api/api';
 import type {Capabilities, GroupSelectionResult} from '../src/api/model';
 import {ApiError} from '../src/api/error';
-import * as fixtures from './fixtures/inventory';
+import * as standardFixtures from './fixtures/inventory';
 import {observedAt} from './fixtures/clock';
 import {found, createPager} from './common';
 import {patchGroupConfig, probeMembers, probeResult, resolveLeaf} from './control';
@@ -32,6 +32,11 @@ const removedFromMain = (find: (text: string) => {from: number; to: number} | un
   const whole = /^[ \t\r]*$/.test(text.slice(start, entry.from)) && end > 0 && /^[ \t\r]*$/.test(text.slice(entry.to, end - 1));
   return whole ? text.slice(0, start) + text.slice(end) : text.slice(0, entry.from) + text.slice(entry.to);
 };
+// An entry goes first in its section; a source without the section gets one at the end, as a new group does.
+const intoSection = (text: string, section: string, line: string) => {
+  const head = new RegExp(`^${section} \\{\\n`, 'm');
+  return head.test(text) ? text.replace(head, open => open + line) : `${text.replace(/\n+$/, '')}\n\n${section} {\n${line}}\n`;
+};
 type InventoryApi = Pick<
   Api,
   | 'nodes'
@@ -59,7 +64,8 @@ export function createInventory(
   interrupt: (groupId: string, network: 'tcp' | 'udp') => boolean,
   geodata: MockGeodataState,
   faults = false,
-  acceptWrites = false
+  acceptWrites = false,
+  fixtures: typeof standardFixtures = standardFixtures
 ) {
   const nodePage = createPager('nodes');
   const providerPage = createPager('providers');
@@ -109,6 +115,8 @@ export function createInventory(
     },
     selectGroup: async (groupId, request, signal) => {
       signal?.throwIfAborted();
+      if (!capabilities.resources.groups.available || capabilities.resources.groups.selection === false)
+        throw new ApiError(404, 'capability_not_supported', 'Group selection is unavailable');
       const group = found(
         groups.find(g => g.id === groupId),
         'Group'
@@ -145,6 +153,8 @@ export function createInventory(
     // Back to the policy's own pick: the pin goes and the member the policy last ranked first comes back.
     clearGroupOverride: async (groupId, network, signal) => {
       signal?.throwIfAborted();
+      if (!capabilities.resources.groups.available || capabilities.resources.groups.selection === false)
+        throw new ApiError(404, 'capability_not_supported', 'Group selection is unavailable');
       const group = found(
         groups.find(g => g.id === groupId),
         'Group'
@@ -167,6 +177,8 @@ export function createInventory(
     },
     patchGroup: async (groupId, ops, ifMatch, signal) => {
       signal?.throwIfAborted();
+      if (!capabilities.resources.groups.available || capabilities.resources.groups.config_patch === false)
+        throw new ApiError(404, 'capability_not_supported', 'Group configuration updates are unavailable');
       const group = found(
         groups.find(g => g.id === groupId),
         'Group'
@@ -296,7 +308,7 @@ export function createInventory(
           ? `  ${quoteName(request.name)}: {\n    url: ${quote(request.url)}\n${options.join('')}  }\n`
           : `  ${quoteName(request.name)}: ${quote(request.url)}\n`
       );
-      const activate = await editSource(text => text.replace(/^(subscription \{\n)/m, `$1${line}`));
+      const activate = await editSource(text => intoSection(text, 'subscription', line));
       log('info', 'honk::subscription', 'Subscription added.', {provider: request.name});
       const finish = () => {
         activate();
@@ -331,7 +343,7 @@ export function createInventory(
       if (!scheme || !fixtures.linkSchemes.includes(scheme)) throw new ApiError(422, 'unsupported_value', `Unsupported share link scheme "${scheme ?? ''}"`);
       if (nodes.some(n => n.name === request.name)) throw new ApiError(409, 'state_conflict', `An inline node named ${request.name} already exists`);
       const line = configLine(() => `  ${quote(request.name)}: ${quote(request.link.trim())}\n`);
-      const activate = await editSource(text => text.replace(/^(node \{\n)/m, `$1${line}`));
+      const activate = await editSource(text => intoSection(text, 'node', line));
       log('info', 'honk::config', 'Node added.', {node: request.name, protocol: scheme});
       const finish = () => {
         activate();

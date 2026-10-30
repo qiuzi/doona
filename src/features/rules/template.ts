@@ -4,7 +4,15 @@ import {scanConfig} from '../../dae/text';
 import {allGroupNames, fileName} from '../../dae/sources';
 import {classifyFilters, readGroupEntries, type GroupEntry} from '../../dae/groups';
 import {defaultGroup, holdsDns, templateGroups, writeTemplate} from '../../dae/setup';
-import {defaultTemplateOptions, detectTemplate, templates, templateGroupLabel, type TemplateOptions, type RuleTemplate} from '../../dae/templates';
+import {
+  defaultTemplateOptions,
+  detectTemplate,
+  routingOptions,
+  templates,
+  templateGroupLabel,
+  type TemplateOptions,
+  type RuleTemplate
+} from '../../dae/templates';
 import type {DiffRow} from '../../ui/ui';
 import {lineDiff} from './diff';
 
@@ -85,13 +93,26 @@ function detectedTemplate(sources: ConfigSource[]) {
 }
 
 export type TemplatesView = TemplateOptions & {current: TemplateChoice | null; primary: TemplateChoice[]; more: TemplateChoice[]};
+// Custom routing keeps the optional rules it already holds, so applying a template does not drop them unseen.
+function customOptions(sources: ConfigSource[]): TemplateOptions {
+  const held = routingSources(sources)
+    .map(source => routingOptions(source.content!))
+    .filter(options => options !== null);
+  if (!held.length) return defaultTemplateOptions;
+  return {
+    blockAds: held.some(options => options.blockAds),
+    blockQuic: held.some(options => options.blockQuic),
+    networkManagerDirect: held.some(options => options.networkManagerDirect)
+  };
+}
 export function templatesView(sources: ConfigSource[], t: Translator): TemplatesView {
   const detected = detectedTemplate(sources);
   const current = detected?.template;
+  const options = detected ?? customOptions(sources);
   return {
-    blockAds: detected?.blockAds ?? defaultTemplateOptions.blockAds,
-    blockQuic: detected?.blockQuic ?? defaultTemplateOptions.blockQuic,
-    networkManagerDirect: detected?.networkManagerDirect ?? defaultTemplateOptions.networkManagerDirect,
+    blockAds: options.blockAds,
+    blockQuic: options.blockQuic,
+    networkManagerDirect: options.networkManagerDirect,
     current: current ? templateChoice(current, t) : null,
     primary: primaryTemplates.map(id => templateChoice(id, t)),
     more: moreTemplates.map(id => templateChoice(id, t))
@@ -99,7 +120,7 @@ export function templatesView(sources: ConfigSource[], t: Translator): Templates
 }
 
 // Why a template cannot be applied, in the order a person would fix it.
-export type TemplateRefusal = 'syntax' | 'writesOff' | 'noSource' | 'split' | 'secret' | 'readOnly' | 'incomplete' | 'denied';
+type TemplateRefusal = 'syntax' | 'writesOff' | 'noSource' | 'split' | 'secret' | 'readOnly' | 'incomplete' | 'denied';
 const refusalText: Record<TemplateRefusal, Key> = {
   syntax: 'rule.template.refused.syntax',
   writesOff: 'rule.template.refused.writesOff',
@@ -139,7 +160,7 @@ function routingIncludes(text: string): string[] {
   }
   return [...new Set(paths)];
 }
-export type TemplateTargetInput = {
+type TemplateTargetInput = {
   sources: ConfigSource[];
   configWritable: boolean;
   daeText: boolean;

@@ -1,4 +1,5 @@
 import {expect, it, vi} from 'vitest';
+import {engineOf} from '../../api/engines';
 import type {ConfigSource} from '../../api/model';
 import {translate, type Translator} from '../../i18n';
 import {writeTemplate} from '../../dae/setup';
@@ -37,6 +38,24 @@ it.each([
     expect(templatesView(sources, t)).toMatchObject({blockAds: false, blockQuic: true, networkManagerDirect: true});
   const {plain, withDns} = templateWrites('bypass', source('main', '', 'main'), [], t, options);
   for (const write of [plain, withDns]) expect(templatesView([source('main', write!.after, 'main')], t)).toMatchObject(options);
+});
+
+it('keeps the optional rules that custom routing holds', () => {
+  const custom = (rules: string[]) => [source('main', `routing {\n${rules.map(rule => `  ${rule}\n`).join('')}  fallback: proxy\n}`, 'main')];
+  expect(templatesView(custom(['domain(geosite:openai) -> proxy', 'domain(geosite:category-ads-all) -> block']), t)).toMatchObject({
+    blockAds: true,
+    blockQuic: false,
+    networkManagerDirect: false
+  });
+  expect(templatesView(custom(['pname(NetworkManager) -> direct', "domain('geosite:cn') -> direct"]), t)).toMatchObject({
+    blockAds: false,
+    blockQuic: false,
+    networkManagerDirect: true
+  });
+  expect(templatesView(custom(['l4proto(udp) && dport(443) -> block']), t)).toMatchObject({blockAds: false, blockQuic: true, networkManagerDirect: false});
+  expect(templatesView(custom(['domain(geosite:openai) -> proxy']), t)).toMatchObject({blockAds: false, blockQuic: false, networkManagerDirect: false});
+  const split = [...custom(['domain(geosite:category-ads-all) -> block']), source('extra', 'routing {\n  l4proto(udp) && dport(443) -> block\n}')];
+  expect(templatesView(split, t)).toMatchObject({blockAds: true, blockQuic: true, networkManagerDirect: false});
 });
 
 it('shows region flags in the apply impact while other labels stay plain', () => {
@@ -83,8 +102,17 @@ it('refuses routing split over files and files it may not write', () => {
   expect(input([plain], {denied: 'main'}).refusal).toBe('denied');
   expect(input([]).refusal).toBe('noSource');
   expect(refusalReason('secret', plain, t)).toBe(
-    'main.dae contains native_api or clash_api settings and cannot be rewritten through the backend. Edit the file on the host.'
+    'main.dae holds a native_api or clash_api secret or nested section, which the backend does not write back. Edit the file on the host.'
   );
+});
+
+it("refuses a file as the engine does: only for an experimental listener's secret or nested section", () => {
+  const refusal = (listener: string) =>
+    input([source('main', `routing { fallback: proxy }\nexperimental {\n  ${listener}\n}\n`, 'main')], {holdsCredentials: engineOf(version).holdsCredentials})
+      .refusal;
+  expect(refusal("native_api { listen: '127.0.0.1:9090' }")).toBeNull();
+  expect(refusal("native_api { secret: '<redacted>' }")).toBe('secret');
+  expect(refusal("clash_api { tls { cert: '/etc/honk/api.pem' } }")).toBe('secret');
 });
 
 it('allows routing includes and lists the paths removed by applying a template', () => {

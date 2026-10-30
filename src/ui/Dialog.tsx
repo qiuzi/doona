@@ -7,8 +7,8 @@ import {useT} from '../i18n';
 import {errorText} from '../api/error';
 import {cx} from './cx';
 import {ActionHelp, Button, PrimaryActions} from './Button';
-import {ProblemAlert, type Problem} from './Feedback';
-import {useMediaQuery, panelQuery, escapeLayers} from './hooks';
+import {ProblemAlert, type Problem} from './Alert';
+import {useMediaQuery, panelQuery, escapeLayers, usePopoverBoundary} from './hooks';
 import {ControlSizeContext} from './controlSize';
 import {Form, FormContext} from './Form';
 
@@ -203,9 +203,10 @@ export function PopoverDialog({
     | {trigger: ReactElement; triggerRef?: never; isOpen?: never; onOpenChange?: never}
     | {trigger?: never; triggerRef: RefObject<Element | null>; isOpen: boolean; onOpenChange: (open: boolean) => void}
   )) {
+  const band = usePopoverBoundary();
   const surface = (
     <Popover
-      boundaryElement={boundaryElement}
+      boundaryElement={boundaryElement ?? band}
       style={() => (boundaryElement ? {maxWidth: boundaryElement.clientWidth - 24} : undefined)}
       className={title ? 'rp-popover rp-popover-dialog' : 'rp-popover'}
       placement={placement}
@@ -471,7 +472,6 @@ export function DetailPanel({
   if (wide)
     return (
       <aside className="rp-panel rp-card" aria-label={title}>
-        <OpenOverlay />
         {head}
         {children}
       </aside>

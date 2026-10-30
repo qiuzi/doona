@@ -129,7 +129,7 @@ export const widthsFor = (id: WidgetId): readonly DashboardWidth[] => {
   return widths.slice(from, to + 1);
 };
 // The offered width nearest a stored one, as a width the card no longer offers or one from a newer or edited layout.
-export const nearestWidth = (id: WidgetId, width: DashboardWidth) => {
+const nearestWidth = (id: WidgetId, width: DashboardWidth) => {
   const [from, to] = span(registry[id]);
   return widths[Math.min(Math.max(widths.indexOf(width), from), to)];
 };
@@ -238,7 +238,7 @@ export function parseLayout(value: unknown): Layout {
     'panel',
     (value.version as number) < 3
   );
-  // Earlier versions' placement and dock fields are dropped: the panel floats until docked again.
+  // Earlier versions' placement fields are dropped; a dock (`docked`, `dockHeight`) is kept as written.
   return {
     version: 4,
     items,

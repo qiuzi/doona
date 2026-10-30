@@ -52,6 +52,31 @@ it('loads a later stage for every language, before and after it is asked for', a
   expect(i18n.translate('zh-TW', 'ui.activity' as Key)).toBe('zh-TW activity');
 });
 
+it('waits for an in-flight stage when returning to a previously loaded language', async () => {
+  const i18n = await import('./index');
+  vi.stubGlobal('localStorage', {getItem: () => 'en'});
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const read = (lang: string, stage: string): Promise<Partial<Catalogue>> =>
+    stage === 'core' ? Promise.resolve({}) : gate.then(() => ({'ui.newBuild': `${lang} ${stage}`}));
+  await i18n.loadLanguage('en', read);
+  await i18n.loadLanguage('zh-TW', read);
+  const stage = i18n.loadStage('activity');
+  let ready = false;
+  const switched = i18n.loadLanguage('zh-TW', read).then(() => {
+    ready = true;
+  });
+  await Promise.resolve();
+  const premature = ready;
+  release();
+  await Promise.all([stage, switched]);
+  expect(premature).toBe(false);
+  expect(i18n.translate('zh-TW', 'ui.newBuild')).toBe('zh-TW activity');
+  vi.unstubAllGlobals();
+});
+
 it('loads a stage when the shown language has it, retrying an idle language that failed once it is asked for', async () => {
   const i18n = await import('./index');
   vi.stubGlobal('localStorage', {getItem: () => 'en'});
@@ -69,6 +94,58 @@ it('loads a stage when the shown language has it, retrying an idle language that
   await i18n.loadLanguage('zh-TW', read);
   expect(i18n.translate('zh-TW', 'ui.activity' as Key)).toBe('zh-TW activity');
   vi.unstubAllGlobals();
+});
+
+it('retries a failed stage after its reader recovers', async () => {
+  const i18n = await import('./index');
+  vi.stubGlobal('localStorage', {getItem: () => 'en'});
+  let offline = true;
+  const read = (_lang: string, stage: string): Promise<Partial<Catalogue>> =>
+    stage === 'core'
+      ? Promise.resolve({})
+      : offline
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve({'ui.activity': 'Activity'} as Partial<Catalogue>);
+  try {
+    await i18n.loadLanguage('en', read);
+    await expect(i18n.loadStage('activity')).rejects.toThrow('offline');
+    offline = false;
+    await i18n.loadStage('activity');
+    expect(i18n.translate('en', 'ui.activity' as Key)).toBe('Activity');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it('waits for the requested stage but not a later stage already in flight', async () => {
+  const i18n = await import('./index');
+  let releaseActivity!: () => void;
+  let releaseRest!: () => void;
+  const activity = new Promise<void>(resolve => (releaseActivity = resolve));
+  const rest = new Promise<void>(resolve => (releaseRest = resolve));
+  const read = (_lang: string, stage: string): Promise<Partial<Catalogue>> =>
+    stage === 'core' ? Promise.resolve({}) : (stage === 'activity' ? activity : rest).then(() => ({'ui.activity': 'Activity'}) as Partial<Catalogue>);
+  await i18n.loadLanguage('en', read);
+  let restReady = false;
+  const later = i18n.loadStage('rest').then(() => {
+    restReady = true;
+  });
+  let activityReady = false;
+  const earlier = i18n.loadStage('activity').then(() => {
+    activityReady = true;
+  });
+  try {
+    await Promise.resolve();
+    expect(activityReady).toBe(false);
+    releaseActivity();
+    await earlier;
+    expect(i18n.translate('en', 'ui.activity' as Key)).toBe('Activity');
+    expect(restReady).toBe(false);
+  } finally {
+    releaseActivity();
+    releaseRest();
+    await later;
+  }
 });
 
 it('falls back to a loaded language when the saved one has not loaded', async () => {

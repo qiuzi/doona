@@ -23,6 +23,7 @@ function placeOf(sources: ConfigSource[], source: ConfigSource, rule: PendingRul
 // is gone.
 export function insertRules(sources: ConfigSource[], source: ConfigSource, rules: PendingRule[]): string | null {
   const text = source.content;
+  const newline = text.includes('\r\n') ? '\r\n' : '\n';
   const scan = scanConfig(text);
   const inserts = rules.map(rule => ({rule, anchor: placeOf(sources, source, rule, scan)}));
   if (inserts.some(insert => !insert.anchor)) return null;
@@ -35,14 +36,16 @@ export function insertRules(sources: ConfigSource[], source: ConfigSource, rules
     const blocks = new Map<string, typeof inserts>();
     for (; i < inserts.length && inserts[i].anchor!.from === from; i++) {
       const key = inserts[i].anchor!.open ?? '';
-      blocks.set(key, [...(blocks.get(key) ?? []), inserts[i]]);
+      const group = blocks.get(key);
+      if (group) group.push(inserts[i]);
+      else blocks.set(key, [inserts[i]]);
     }
     out += text.slice(at, from);
     for (const [open, group] of blocks)
       out +=
-        open +
-        group.map(({rule, anchor}) => anchor!.indent + ruleLine(rule.condition, rule.outbound, rule.must) + '\n').join('') +
-        (group[0].anchor!.close ?? '');
+        open.replaceAll('\n', newline) +
+        group.map(({rule, anchor}) => anchor!.indent + ruleLine(rule.condition, rule.outbound, rule.must) + newline).join('') +
+        (group[0].anchor!.close ?? '').replaceAll('\n', newline);
     at = from;
   }
   return out + text.slice(at);
@@ -51,7 +54,11 @@ export function insertRules(sources: ConfigSource[], source: ConfigSource, rules
 // The held rules grouped by the file they go into, in the order the files were first used.
 export function byFile(rules: PendingRule[]): PendingRule[][] {
   const files = new Map<string, PendingRule[]>();
-  for (const rule of rules) files.set(rule.sourceId, [...(files.get(rule.sourceId) ?? []), rule]);
+  for (const rule of rules) {
+    const group = files.get(rule.sourceId);
+    if (group) group.push(rule);
+    else files.set(rule.sourceId, [rule]);
+  }
   return [...files.values()];
 }
 

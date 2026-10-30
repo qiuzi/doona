@@ -277,9 +277,11 @@ test.describe('with the base profile', () => {
       'The configuration turns off 4 recorders',
       'Geodata is unavailable',
       'Subscriptions cannot be updated for now',
-      'This honk build lacks 6 features'
+      'This honk build lacks 7 features'
     ]);
-    await expect(rows.nth(0).locator('.rp-note')).toHaveText('Configuration, Validation, Nodes and node sources');
+    await expect(rows.nth(0).locator('.rp-note')).toHaveText(
+      'Configuration, Validation, Nodes and node sources, Global settings form, Outbound mode, Creating and editing groups'
+    );
     await expect(rows.nth(1).locator('.rp-note')).toHaveText('DNS log, Traffic history, Memory history, Logs');
     await expect(rows.nth(2).locator('.rp-note')).toHaveCount(0);
     await expect(card.locator('pre')).toHaveCount(0);
@@ -308,6 +310,66 @@ test.describe('with the base profile', () => {
     await expect(page).toHaveURL(/#\/overview$/);
     await expect(page.getByRole('heading', {name: 'System status', exact: true})).toBeVisible();
   });
+
+  test('on a phone a popover opened just above the bottom bar stays between the top bar and the bottom bar', async ({page}) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto('/#/overview');
+    const button = page.locator('.rp-limit').nth(1).getByRole('button', {name: 'How to turn on'});
+    await button.scrollIntoViewIfNeeded();
+    // Bring the trigger down to the bottom bar, where the popover has no room below it.
+    await button.evaluate(el => window.scrollBy(0, el.getBoundingClientRect().bottom - document.querySelector('.rp-hubbar')!.getBoundingClientRect().top + 4));
+    await button.click();
+    const popover = page.locator('.rp-popover', {has: page.getByRole('dialog', {name: 'How to turn on'})});
+    await expect(popover).toBeVisible();
+    const edges = () =>
+      popover.evaluate(el => ({
+        top: el.getBoundingClientRect().top,
+        bottom: el.getBoundingClientRect().bottom,
+        bar: document.querySelector('.rp-top')!.getBoundingClientRect().bottom,
+        nav: document.querySelector('.rp-hubbar')!.getBoundingClientRect().top
+      }));
+    await expect
+      .poll(async () => {
+        const box = await edges();
+        return box.bottom <= box.nav && box.top >= box.bar;
+      })
+      .toBe(true);
+  });
+});
+
+test('with configuration writes and recorders off, each group names the setting and links each feature', async ({page}) => {
+  const {api, handlers} = await mockBackend(page);
+  handlers['GET capabilities'] = async () => {
+    const capabilities = await api.capabilities();
+    capabilities.resources.events.available = false;
+    capabilities.resources.config.writable = false;
+    for (const id of ['traffic_history', 'memory_history', 'logs', 'dns_log'] as const)
+      capabilities.resources[id] = {...capabilities.resources[id], available: false};
+    return capabilities;
+  };
+  await page.goto('/#/overview');
+  const card = page.locator('section').filter({has: page.getByRole('heading', {name: 'Features that are off', exact: true})});
+  const rows = card.locator('.rp-limit');
+  await expect(rows.locator('.rp-limit-text > span:first-child')).toHaveText([
+    'The configuration is read-only',
+    'The configuration turns off 4 recorders',
+    'Flows are recorded only while viewed',
+    'This honk build lacks 1 feature'
+  ]);
+  await expect(rows.nth(0).locator('.rp-note')).toHaveText('Configuration, Global settings form, Outbound mode, Editing rules');
+  await expect(rows.nth(1).locator('.rp-note')).toHaveText('DNS log, Traffic history, Memory history, Logs');
+  // Each group's help names the settings that turn its features on and links each feature's requirements.
+  const help = page.getByRole('dialog', {name: 'How to turn on'});
+  await rows.nth(0).getByRole('button', {name: 'How to turn on'}).click();
+  await expect(help.locator('pre')).toHaveText('experimental {\n  native_api {\n    config_write: true\n  }\n}');
+  await expect(help.getByRole('link', {name: /^Configuration: requirements/})).toHaveAttribute('href', /feature-requirements\.html#req-config-edit$/);
+  await expect(help.getByRole('link', {name: /^Editing rules: requirements/})).toHaveAttribute('href', /feature-requirements\.html#req-rules$/);
+  await page.keyboard.press('Escape');
+  await expect(help).toBeHidden();
+  await rows.nth(1).getByRole('button', {name: 'How to turn on'}).click();
+  await expect(help.locator('pre')).toContainText('record_traffic: true');
+  await expect(help.getByRole('link', {name: /^Traffic history: requirements/})).toHaveAttribute('href', /feature-requirements\.html#req-traffic-history$/);
+  await expect(help.getByRole('link', {name: /^Logs: requirements/})).toHaveAttribute('href', /feature-requirements\.html#req-logs$/);
 });
 
 test.describe(() => {

@@ -7,8 +7,7 @@ import {detectHostedBackend} from './api/profiles';
 import {pruneRings} from './store/rings';
 import {expectsAccess, initializeApi, startedOnMock} from './api';
 import {preloadActivity} from './shell/registry';
-import {Button, Empty, ErrorMessage, PageSkeleton} from './ui/ui';
-import {toast} from './ui/ui';
+import {Button, Empty, ErrorMessage, PageSkeleton, toast} from './ui/ui';
 import {activated, announceBuild} from './shell/newBuild';
 import {DEFAULT_LANG, FONT, LangContext, LOCALE, loadLanguage, loadedLang, pageDirection, readLang, translate, type Lang} from './i18n';
 import startupText from 'virtual:startup-text';
@@ -99,8 +98,6 @@ function Startup() {
     </LangContext.Provider>
   );
 }
-// Touch hit areas draw nothing, so they load after the first paint, and only where a finger may point.
-if (matchMedia('(any-pointer: coarse)').matches) void import('./ui/styles/touch.css');
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Startup />

@@ -1,7 +1,7 @@
 import {Button, GridLayout, GridList, GridListItem, Size, Virtualizer} from 'react-aria-components';
 import {useCallback, useState, type ReactNode} from 'react';
 import {NodeTile, type NodeStatus} from '../../ui/Tile';
-import {Empty} from '../../ui/Feedback';
+import {Empty} from '../../ui/Empty';
 import {cx} from '../../ui/cx';
 import {useContentWidth} from '../../ui/hooks';
 
@@ -16,7 +16,7 @@ export function nodeGridSize(width: number, gap: number, count: number) {
   return {columns, width: Math.max(228, (width - gap * (columns + 1)) / columns), overflows: gap + rows * (56 + gap) > panelHeight};
 }
 
-export type GridNode = {id: string; name: string; nodeName: boolean; status: NodeStatus; description: string};
+type GridNode = {id: string; name: string; nodeName: boolean; status: NodeStatus; description: string};
 type NodeGridProps = {
   nodes: GridNode[];
   label: string;

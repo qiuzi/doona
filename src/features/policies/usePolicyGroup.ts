@@ -1,4 +1,4 @@
-import {probeFallbackNotice} from '../shared/probe';
+import {probeFallbackNotice, probeLevel} from '../shared/probe';
 import type {ProbeOptions} from '../../store/probeOptions';
 import {href} from '../../shell/route';
 import {selectedIncludeLabels, selectedIncludes, recogniseInclude} from './group/groupIncludes';
@@ -15,6 +15,7 @@ import type {OutboundCatalogue} from '../shared/groupText';
 import {useCheckEdit} from './useCheckEdit';
 import {toast} from '../../ui/ui';
 import {failureNotice, requestIdOf} from '../../api/error';
+import {foldFamilies} from '../../api/selectors';
 import {selectMember} from '../shared/selectMember';
 export type PolicyGroupInput = {
   nodes?: Node[];
@@ -110,14 +111,10 @@ export function usePolicyGroup(input: PolicyGroupInput) {
     if (input.editRequested && declared.editable && !declared.open) openRequested();
   }, [input.editRequested, declared.editable, declared.open]);
   const filters = useMemo(() => (declaration.owner && declaration.owner !== 'ambiguous' ? declaration.owner.entry.filters : []), [declaration.owner]);
+  const otherFilters = useMemo(() => filters.filter(filter => !recogniseInclude(filter)), [filters]);
   const named = useMemo(() => selectedIncludeLabels(filters, input.nodes ?? [], input.providers ?? [], lang), [filters, input.nodes, input.providers, lang]);
   const includes = {
-    filters:
-      declaration.owner && declaration.owner !== 'ambiguous'
-        ? !filters.length || filters.some(filter => !recogniseInclude(filter))
-          ? filters.filter(filter => !recogniseInclude(filter))
-          : null
-        : null,
+    filters: declaration.owner && declaration.owner !== 'ambiguous' ? (!filters.length || otherFilters.length ? otherFilters : null) : null,
     tags: (['region', 'subscription', 'node', 'group'] as const).flatMap(kind =>
       selectedIncludes(filters, kind).map(value => {
         const region = kind === 'region' ? named.regions.get(value) : undefined;
@@ -141,7 +138,10 @@ export function usePolicyGroup(input: PolicyGroupInput) {
     void control.probe(options).then(result => {
       if (result && g) {
         const summary = probeSummary(result);
-        toast('positive', t('ui.valuePair', {label: g.name, value: t(summary.key, summary.params)}) + probeFallbackNotice(result.fallback, g.name, t));
+        toast(
+          probeLevel(foldFamilies(result.results)),
+          t('ui.valuePair', {label: g.name, value: t(summary.key, summary.params)}) + probeFallbackNotice(result.fallback, g.name, t)
+        );
       }
     });
   const release = () =>

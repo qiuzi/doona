@@ -261,12 +261,11 @@ describe('settings, features and aliases', () => {
     }
   });
 
-  // The cards mark each control with `data-setting`; a marked control the registry lacks, or a registered one no card
-  // marks, has no search entry or a dead one.
+  // Both directions matter: an unregistered mark is unsearchable, and an unmarked entry cannot focus its control.
   it('matches the controls the Settings cards mark', () => {
     const cards = import.meta.glob<string>('../../features/settings/*Settings.tsx', {query: '?raw', import: 'default', eager: true});
     const marked = Object.values(cards).flatMap(source => [...source.matchAll(/data-setting="([^"]+)"/g)].map(match => match[1]));
-    // The runtime card marks its numeric and recorder fields by their registry ids; log level is its one literal.
+    // Numeric and recorder fields use their registry ids dynamically; log level is the runtime card's literal mark.
     expect(marked.sort()).toEqual([...settingsFields.map(field => field.id), 'log.level'].sort());
   });
 

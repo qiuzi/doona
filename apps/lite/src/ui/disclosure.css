@@ -1,0 +1,15 @@
+.lite-disclosure-grid {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--spacing-3);
+  align-items: start;
+}
+.lite-disclosure {
+  display: contents;
+}
+.lite-disclosure-actions {
+  grid-column: 2;
+  grid-row: 1;
+}
+.lite-subscription-row .lite-disclosure-actions {
+  align-self: center;
+}

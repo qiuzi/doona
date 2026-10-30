@@ -6,6 +6,129 @@ This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 Entries live in [changes/](changes/) until release.
 
+## [0.1.0-rc.3] - 2026-10-28
+
+### Added
+
+- Lite detects honk on the page origin, connects when anonymous access is allowed, and otherwise opens the matching sign-in step with an option to use another backend. (#611)
+- Lite connection help identifies the honk native API root and explains anonymous access; sign-in text covers password sessions and tokens. (#611)
+- Lite served by honk or self-hosted no longer offers the demo; the demo site opens straight into it. (#611)
+- System status lists more features that are off, such as editing rules or groups, import and revision history, and geodata sources, each with the setting or start-up option that turns it on and a link to its requirements. (#604)
+- The read-only help on Configuration and on the outbound mode gives the same explanation as System status, with the setting that turns writes on and a link to the requirements. (#604)
+
+### Changed
+
+- Help links in doona and doona lite open the documentation at https://doona.daeuniverse.org/. (#600)
+- The README defaults to Traditional Chinese, with the English text in `README.en.md`, and the archives and packages ship both. (#603)
+- Use 600-weight page and section headings with compact header spacing in doona lite. (#610)
+- Pair Figtree with system Chinese fonts and retain stronger Chinese button labels in doona lite. (#610)
+- Use subtle neutral selection fills and 1 px emphasized borders for routing cards, group rows and segmented controls; reserve duck yellow for keyboard focus. (#610)
+- Give primary actions dark neutral fills in light mode and light neutral fills in dark mode, with contrasting text and the same 8 px corners as other controls. Destructive actions retain red with matching corners. (#610)
+- Give the sidebar and content a shared background with a 1 px divider, while keeping md segmented controls, control heights and aligned page-header actions. (#610)
+
+### Fixed
+
+- Retry failed catalogue stages without losing the loaded language, and wait only for the requested stage and its prerequisites. (#613)
+- Copying from an open dialog puts the text on the clipboard instead of reporting success with nothing copied. (#613)
+- Lite copies share links and restart values over a plain-HTTP router address, and reports when copying fails. (#613)
+- Keep folded editor tools beside the source actions instead of in a separate row. (#612)
+- Render translated pages with fallback fonts after a three-second wait when optional fonts stall. (#613)
+- Keep all node columns reachable in narrow lite tables. (#609)
+- Wrap lite subscription node descriptions within the visible table width. (#609)
+- Open lite node row menus above their triggers to keep pagination clear. (#609)
+- Label compact lite node latency values and truncate protocol/source details to one line. (#609)
+- Show the node import validation message once in the lite dialog footer, without an empty preview gap. (#609)
+- Keep lite dialog fields reachable by scrolling above the footer on short screens. (#609)
+- Align the lite subscription expand/collapse control with the search field and list on phones. (#609)
+- Hide lite pinned-column edge shadows on both sides while retaining pinning and opaque cell backgrounds. (#609)
+- doona lite: at mid window widths the groups list keeps each group name beside the details panel, and the latency is no longer cut off. (#607)
+- Prevent clicks on cached page actions from being lost when a refresh starts after navigation. (#613)
+- On the phone and tablet layouts, popovers stay between the top bar and the bottom navigation bar instead of running under it. (#606)
+- Rule templates refuse a file only when its experimental native_api or clash_api section holds a secret or a nested section, as honk does, rather than whenever such a section exists. (#601)
+- System status no longer says that flows set to Off are recorded on demand; it tells the Off mode in Settings apart from recording on demand and from a configuration that forbids recording. (#601)
+- Geodata hints name the assets.geodata.geosite and assets.geodata.geoip keys in an assets section, and say that honk refuses them together with the older experimental.native_api download URL keys. (#601)
+- A source whose text does not match its hash is described as incomplete, and as redacted only when the backend masked listener secrets. (#601)
+- Simplified Chinese names a policy group 组 and Traditional Chinese 群組 everywhere, instead of mixing 群组 and 策略組 into a few labels. (#598)
+- Load each translation stage's Noto glyphs before rendering so Traditional and Simplified Chinese card titles do not mix web-font and system-font weights on a cold load. (#613)
+- Preserve backend response fields named `__proto__` when updating cached data. (#613)
+- Clear derived connection rates when byte counters reset or become unavailable during a rapid refresh. (#613)
+- Wait for pending catalogue sections before switching back to a previously loaded language. (#613)
+- Preserve a group's all-node membership when changing its policy in lite. (#613)
+- Keep inline node, subscription and routing declarations separate when adding or duplicating entries in lite. (#613)
+- Keep subscribed-node group bindings scoped to their source when provider metadata is unavailable. (#613)
+- Make demo API reads and mutations respect unavailable capability flags. (#613)
+- Reject invalid DNS-log source filters instead of returning unfiltered records. (#613)
+- Preserve bare source IPs and IPv6 destinations in demo flow evidence, and count UTF-8 bytes when paging DNS logs. (#613)
+- Release dashboard tile references on unmount and prevent drag listeners from accumulating across repeated keyboard drags. (#613)
+- Release unread response bodies after authentication probes and successful or already-ended session logout. (#613)
+- Release decoded wallpaper bitmaps when canvas creation or drawing fails. (#613)
+- Settings tabs in a narrow lite window no longer show a scrollbar; they use the Astryx tab row with overflow arrows. (#616)
+
+### Internal
+
+- The root's `data-scrolled` attribute has one scroll listener, in the shell, instead of a second one the Glass palettes added and never removed. (#597)
+- Reduce repeated tag, chart, configuration, gallery and traffic projection work. (#613)
+- Share icon wrappers and subscription name quoting. (#613)
+- Remove obsolete UI, shell, store and feature exports, helpers, forwarding paths and state. (#613)
+- Share region-name matching and the clipboard helper between the standard and lite apps, and compose the existing toolbar and divider components. (#613)
+- Remove unused lite code, translation entries and unconsumed exports. (#613)
+- Lite styles Astryx components only through its theme slots, documented tokens and table plugin, and renders loading placeholders with its Skeleton. (#616)
+
+## [0.1.0-rc.2] - 2026-10-27
+
+### Added
+
+- Build and deploy doona with the Lite demo at `/lite/`, with separate demo badges and service worker routing. (#568)
+- doona lite, a simple config editor in `apps/lite` for groups, subscriptions, nodes, routing and DNS, in light and dark themes, with every change reviewed in plain words before it is written. (#566)
+- Paste several node links at once and test all filtered nodes with automatic latency sorting. (#570)
+- The route trace takes an optional firewall mark among its advanced fields, in decimal or 0x hexadecimal, so `mark()` rules can be decided. (#592)
+
+### Changed
+
+- A first run opens Settings on a connect card: backend URL, Token, Test connection as the main action and the built-in demo data as a secondary choice. (#572)
+- The floating widget panel starts collapsed. On pages other than Activity and Overview, an open panel along the content edge keeps a column of its own, so tables and fields end beside it instead of under it. (#572)
+- On phones, a hub's sibling pages are drawn as tabs over a divider, apart from the page's own segmented tabs, and a scrolling tab bar fades its cut end more clearly. (#572)
+- The Connections and Nodes list tabs are named List instead of repeating the page name. (#572)
+- On touch screens, icon buttons, help triggers and number steppers take a 44px hit area without changing their drawn size. (#572)
+- A page left with a row open in its side panel is kept like any other page, so going back shows it as it was left. (#583)
+- Up to four pages you left recently stay as they were, so going back to one shows it at once; pages out of sight stop polling. A page left with a dialog open is rebuilt. (#565)
+- Switching pages keeps the current page responsive while the next one renders, and loading or switching a page does less layout work. (#565)
+- Interface text loads in three parts, for sign-in, Activity and the other pages, so the first screens no longer wait for every page's messages. (#571)
+
+### Fixed
+
+- Include third-party notices for the packages bundled into each edition's release archive, including lite's dependencies and shared modules. (#590)
+- Flow records are cards on a phone, with the target, node and rule each on its own line and the state and start time in view; on wider screens the rule wraps instead of being cut and the protocol header fits in every language. (#572)
+- The DNS log's device filter has a visible label, and its counts and actions fold as one group under the filters. (#572)
+- The routing trace and DNS query tabs explain what they do before the first run. (#572)
+- The connections group row's active count and the phone filter hint are no longer cut. (#572)
+- A cancelled read or operation start no longer keeps waiting for its deadline after a garbage collection. (#576)
+- Test all on the Nodes page tests only the listed nodes with a supported probe, counts only those in its summary, and is disabled when none can be tested. (#588)
+- A policy group's test summary reports a failed or inconclusive test as such instead of always as a success. (#588)
+- Engine-specific group settings that hold objects or lists show their JSON text instead of `[object Object]`. (#588)
+- A group filter such as `name(keyword: harbor)` no longer blocks renaming or removing a subscription tagged `harbor`; only `subtag(...)` arguments count. (#588)
+- In the config editor, completion after `->` or `fallback:` inside `dns` offers the defined upstreams with `asis` and `reject` for requests, or `accept` and `reject` for responses, instead of traffic outbounds. (#588)
+- In the demo backend, adding a node or subscription to a configuration without a `node` or `subscription` section creates the section instead of silently writing nothing. (#588)
+- Flow trace steps show the error the backend reports, and DNS steps show the query type and answer status. (#589)
+- Events link to the recording settings and the configuration page only when the backend offers them. (#589)
+- The event capture note shows the engine's grace period instead of always saying 60 s. (#589)
+- Regex filter previews fall back to the pattern text when it has more than three variable-length repetitions (`*`, `+`, `?`, `{m,n}`), which could stall the page. (#589)
+- doona asks for confirmation before suspending the service, clearing the logs or switching to Direct or Global mode. (#569)
+- Leaving an unapplied rule template or a group draft requires confirmation. Form errors appear beside their fields, and disabled actions explain why they are unavailable. (#569)
+- Invalid or blank backend URLs cannot be saved. A changed connection requires signing in again, and one Escape closes search. (#569)
+- The dialog for unsaved changes names what leaving discards: the config file, runtime overrides, backend profile, group, node, rule or outbound mode. (#569)
+- Interface terms are translated: generation, the latest database revision and re-evaluated rules, with a short explanation where they appear. (#569)
+- Socket mark in global settings has a short explanation. (#569)
+- The rule edit dialog saves with a Save button, and success toasts no longer show operation ids. (#569)
+
+### Internal
+
+- The chart tip rows, the node column of connections and flows, the dashboard card drag type and the mock's subscription parsing each have one implementation instead of two. (#587)
+- Clearing all toasts also forgets their repeat-message markers. (#587)
+- Stale control size comments on tabs, cards and widget layout migration now match the code. (#587)
+- Touch hit areas ship in the main stylesheet instead of a separate chunk, and the catalogue stage list has one source. (#585)
+- Saving a backend or signing out rewrites only the address before the app reloads, instead of rendering a page the reload discards. (#582)
+
 ## [0.1.0-rc.1] - 2026-10-24
 
 ### Added
@@ -834,7 +957,9 @@ Entries live in [changes/](changes/) until release.
 
 - Keep table columns and action cells visible and prevent cards and controls from overflowing.
 
-[Unreleased]: https://github.com/Zakkaus/doona/compare/v0.1.0-rc.1...HEAD
+[Unreleased]: https://github.com/Zakkaus/doona/compare/v0.1.0-rc.3...HEAD
+[0.1.0-rc.3]: https://github.com/Zakkaus/doona/compare/v0.1.0-rc.2...v0.1.0-rc.3
+[0.1.0-rc.2]: https://github.com/Zakkaus/doona/compare/v0.1.0-rc.1...v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/Zakkaus/doona/compare/v0.1.0-beta.20...v0.1.0-rc.1
 [0.1.0-beta.20]: https://github.com/Zakkaus/doona/compare/v0.1.0-beta.19...v0.1.0-beta.20
 [0.1.0-beta.19]: https://github.com/Zakkaus/doona/compare/v0.1.0-beta.18...v0.1.0-beta.19

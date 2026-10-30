@@ -2,7 +2,7 @@ import type {Version} from '../model';
 import {honk} from './honk';
 import type {Engine} from './types';
 
-export type {Engine, EngineReason, EngineSubject} from './types';
+export type {Engine, EngineAction, EngineReason, EngineSubject} from './types';
 
 // An engine doona has no knowledge of: the contract's own facts are all the page can give.
 const unknown: Engine = {
@@ -10,7 +10,6 @@ const unknown: Engine = {
   reason: () => undefined,
   holdsCredentials: () => false,
   snippet: settings => settings.map(({key, value}) => `${key}: ${value}`).join('\n'),
-  settingName: key => key,
   redactedSections: () => [],
   daeText: false,
   nodeLinkSchemes: null,

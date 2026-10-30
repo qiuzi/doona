@@ -35,7 +35,7 @@ function parseLine(filter: string): Term[] | null {
   const terms = splitTop(filter, '&&').map(parseTerm);
   return terms.every((term): term is Term => term !== null) && terms.length ? terms : null;
 }
-export type FilterNode = {name: string; subscription_tag: string | null};
+type FilterNode = {name: string; subscription_tag: string | null};
 // A group's filter lines parsed and compiled once, as a test honk would apply to each node.
 export function compileFilters(filters: string[]): (node: FilterNode) => boolean {
   const lines = filters.map(parseLine).filter((line): line is Term[] => line !== null);
@@ -54,4 +54,13 @@ export function compileFilters(filters: string[]): (node: FilterNode) => boolean
         )
     );
 }
-export const groupAdmits = (filters: string[], node: FilterNode) => compileFilters(filters)(node);
+// The mock's activation passes each parsed entry's filter array for every candidate node, so compile it once.
+const compiled = new WeakMap<string[], (node: FilterNode) => boolean>();
+export function groupAdmits(filters: string[], node: FilterNode) {
+  let predicate = compiled.get(filters);
+  if (!predicate) {
+    predicate = compileFilters(filters);
+    compiled.set(filters, predicate);
+  }
+  return predicate(node);
+}

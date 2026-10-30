@@ -1,6 +1,6 @@
 import {useEffect, useRef, type ReactNode} from 'react';
 import {Button as RButton, DropIndicator, GridList, GridListItem, type DragAndDropOptions, type GridListProps} from 'react-aria-components';
-import {useDragAndDrop} from './dragAndDrop';
+import {cardType, useDragAndDrop} from './dragAndDrop';
 import {buttonClass} from './Button';
 import {cellSize} from './WidgetGrid';
 import {DashboardBody, sectionGrid, tileAttributes, usePacking, type TileProps} from './DashboardTile';
@@ -9,17 +9,19 @@ import {DashboardGaps, dragStarted} from './DashboardGaps';
 import './styles/dashboard.css';
 import './styles/sortable.css';
 
-const type = 'application/x-doona-card';
 const unpacked = {current: null};
 export type CanvasPlace = {target?: string; after?: boolean};
 
 // After a native drag ends, WebKit skips the pointerdown of the next press while its mousedown, pointerup and click
 // still arrive, so React Aria's press handlers ignore that press and the first button pressed after a drop does
 // nothing. Once per drag, a mousedown without a pointerdown before it gets the pointerdown WebKit left out.
+let cancelPressRepair: (() => void) | undefined;
 function repairNextPress() {
+  cancelPressRepair?.();
   const done = () => {
     document.removeEventListener('pointerdown', done, true);
     document.removeEventListener('mousedown', repair, true);
+    cancelPressRepair = undefined;
   };
   const repair = (event: MouseEvent) => {
     done();
@@ -36,6 +38,7 @@ function repairNextPress() {
       })
     );
   };
+  cancelPressRepair = done;
   document.addEventListener('pointerdown', done, true);
   document.addEventListener('mousedown', repair, true);
 }
@@ -87,12 +90,12 @@ export function SortableCanvas<T extends TileProps>({
     ref.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(rearm.focus)}"]`)?.focus();
   }, [rearm]);
   const read = async (event: {items: Parameters<NonNullable<DragAndDropOptions['onRootDrop']>>[0]['items']}) => {
-    for (const item of event.items) if (item.kind === 'text' && item.types.has(type)) return item.getText(type);
+    for (const item of event.items) if (item.kind === 'text' && item.types.has(cardType)) return item.getText(cardType);
   };
   const {dragAndDropHooks} = useDragAndDrop({
-    getItems: keys => [...keys].map(key => ({[type]: String(key), 'text/plain': textValue(items.find(item => item.id === key)!)})),
+    getItems: keys => [...keys].map(key => ({[cardType]: String(key), 'text/plain': textValue(items.find(item => item.id === key)!)})),
     getAllowedDropOperations: () => ['move'],
-    acceptedDragTypes: [type],
+    acceptedDragTypes: [cardType],
     getDropOperation: () => 'move',
     onDragStart: event => dragStarted(String([...event.keys][0])),
     onDragEnd: () => {

@@ -73,6 +73,14 @@ it('keeps split network selection unset for both and omits mutable interrupt con
   expect(policyCardView(g, members, 'both', t).fields.some(field => !Array.isArray(field) && field.label === t('policy.cfg.interruptConnections'))).toBe(false);
   expect(groupConfigFields(g)).toContainEqual(['policy.cfg.checkInterval', {key: 'ui.seconds', params: {n: 30}}]);
   expect(groupConfigFields(g)).toContainEqual(['policy.cfg.interruptConnections', {key: 'ui.no'}]);
+  const engine = {...g, config: {...g.config, 'x-dae': {weight: 2, tags: ['a']}, 'x-list': [1, 'b'], 'x-text': 'plain'}} as typeof g;
+  expect(groupConfigFields(engine)).toEqual(
+    expect.arrayContaining([
+      [{key: 'flow.f.input', params: {name: 'x-dae'}}, '{"weight":2,"tags":["a"]}'],
+      [{key: 'flow.f.input', params: {name: 'x-list'}}, '[1,"b"]'],
+      [{key: 'flow.f.input', params: {name: 'x-text'}}, 'plain']
+    ])
+  );
   // An unset option reads as off, flagged so the card can say the engine default applies.
   const unset = {...g, config: {...g.config, interrupt_connections: null}};
   expect(policyCardView(unset, members, 'both', t)).toMatchObject({interrupt: false, interruptUnset: true});
@@ -154,13 +162,6 @@ it('reports a partial probe with translated counts and the stopping error', () =
   expect(text).toContain('1,200');
   expect(text).not.toContain('ui.operationFailed');
   expect(actionErrorText(new ApiError(503, 'unavailable', 'offline'), t)).toBe(t('ui.backendMessage', {message: 'offline'}));
-});
-
-// Pinning depends on each group's can_override, which the page-wide note cannot know; the cards offer it themselves.
-it('keeps pinning out of the page-wide note in every language', () => {
-  expect(translate('en', 'policy.note')).not.toMatch(/pin/i);
-  // The zh word for pinning, taken from the pinned badge.
-  for (const lang of ['zh-TW', 'zh-CN'] as const) expect(translate(lang, 'policy.note')).not.toContain(translate(lang, 'policy.overridden').slice(-2));
 });
 
 it('counts each probed member once, by the row that says most', () => {

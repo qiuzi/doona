@@ -67,24 +67,36 @@ describe('flags from the shared region detector', () => {
     expect(flagForName(name)).toBeNull()
   );
 
-  it.each(['JP memoized', 'unknown memoized', '🇯🇵 memoized'])('does no regex work for a repeated name: %s', name => {
-    flagForName(name);
+  it.each([
+    ['JP memoized', '🇯🇵'],
+    ['unknown memoized', null],
+    ['🇯🇵 memoized', null]
+  ] as const)('reuses the name lookup for %s, including missing and embedded flags', (name, expected) => {
+    expect(flagForName(name)).toBe(expected);
     const spy = vi.spyOn(RegExp.prototype, 'exec');
-    for (let i = 0; i < 1000; i++) flagForName(name);
-    const calls = spy.mock.calls.length;
-    spy.mockRestore();
-    expect(calls).toBe(0);
+    try {
+      const flag = flagForName(name);
+      const calls = spy.mock.calls.filter(([input]) => input === name).length;
+      expect(flag).toBe(expected);
+      expect(calls).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
-  it('evicts the oldest lookup when the cache reaches its limit', () => {
-    flagForName('JP oldest cache entry');
+  it('evicts the oldest flag lookup when the cache reaches its limit', () => {
+    const name = 'JP oldest cache entry';
+    expect(flagForName(name)).toBe('🇯🇵');
     for (let i = 0; i < 2048; i++) flagForName(`unknown cache entry ${i}`);
     const spy = vi.spyOn(RegExp.prototype, 'exec');
-    const flag = flagForName('JP oldest cache entry');
-    const calls = spy.mock.calls.length;
-    spy.mockRestore();
-    expect(flag).toBe('🇯🇵');
-    expect(calls).toBeGreaterThan(0);
+    try {
+      const flag = flagForName(name);
+      const calls = spy.mock.calls.filter(([input]) => input === name).length;
+      expect(flag).toBe('🇯🇵');
+      expect(calls).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -98,16 +110,24 @@ it.each([
   expect(resolvedFlag(name, overrides, enabled)).toBe(expected);
 });
 
-it('resolves repeated manual and automatic flags through the memoized name lookup', () => {
-  for (const name of ['Japan resolved memoized', 'unknown resolved memoized', '🇯🇵 resolved memoized']) {
-    resolvedFlag(name, {}, true);
-    const spy = vi.spyOn(RegExp.prototype, 'exec');
-    for (let i = 0; i < 1000; i++) {
-      resolvedFlag(name, {}, true);
-      resolvedFlag(name, {[`node:${name}`]: 'TW'}, true);
-    }
-    const calls = spy.mock.calls.length;
-    spy.mockRestore();
+it.each([
+  ['Japan resolved memoized', '🇯🇵', '🇹🇼'],
+  ['unknown resolved memoized', null, '🇹🇼'],
+  ['🇯🇵 resolved memoized', null, null]
+] as const)('reuses detection for %s while applying current overrides and enabled state', (name, automatic, manual) => {
+  expect(resolvedFlag(name, {}, true)).toBe(automatic);
+  const spy = vi.spyOn(RegExp.prototype, 'exec');
+  try {
+    const flags = [
+      resolvedFlag(name, {[`node:${name}`]: 'TW'}, true),
+      resolvedFlag(name, {[`node:${name}`]: 'none'}, true),
+      resolvedFlag(name, {}, true),
+      resolvedFlag(name, {[`node:${name}`]: 'TW'}, false)
+    ];
+    const calls = spy.mock.calls.filter(([input]) => input === name).length;
+    expect(flags).toEqual([manual, null, automatic, null]);
     expect(calls).toBe(0);
+  } finally {
+    spy.mockRestore();
   }
 });

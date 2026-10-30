@@ -316,20 +316,30 @@ it('names a DNS duplicate by its action, comparing upstreams without case, and o
   expect(duplicateOf('request', [], held, 'ip(1.2.3.4/32)', 'reject', t)).toBeNull();
 });
 
-it('says a settled rule write is in effect, keeps the count and notes that open connections keep their route', () => {
-  const zh: Translator = (key, params) => translate('zh-TW', key, params);
-  expect(ruleWritten('rule.added', t)).toEqual({text: 'New rule is in effect', detail: 'Existing connections keep their current route until they reconnect.'});
-  expect(ruleWritten('rule.edited', t).text).toBe('Rule change is in effect');
-  expect(ruleWritten('rule.removed', t).text).toBe('Rule removed; the change is in effect');
+it('keeps singular and plural counts in settled rule write notices', () => {
   expect(ruleWritten('rule.applied', t, 1).text).toBe('1 rule is in effect');
   expect(ruleWritten('rule.applied', t, 3).text).toBe('3 rules are in effect');
+});
+
+it('localizes the settled rule count and connection detail in Traditional Chinese', () => {
+  const zh: Translator = (key, params) => translate('zh-TW', key, params);
   const localized = ruleWritten('rule.applied', zh, 2);
+  expect(localized.text).toBe(translate('zh-TW', 'rule.applied', {n: 2}));
   expect(localized.text).toMatch(/^2 /);
   expect(localized.detail).toBe(translate('zh-TW', 'rule.keepsRoute'));
   expect(localized.detail).not.toBe(ruleWritten('rule.applied', t, 2).detail);
-  for (const lang of ['zh-TW', 'zh-CN', 'en'] as const)
-    for (const key of ['rule.added', 'rule.edited', 'rule.removed', 'rule.applied'] as const)
-      expect(translate(lang, key, {n: 2})).not.toMatch(/重載|重载|reload/i);
+});
+
+it('announces settled rule writes without asking for a reload', () => {
+  for (const lang of ['zh-TW', 'zh-CN', 'en'] as const) {
+    const localized: Translator = (key, params) => translate(lang, key, params);
+    for (const key of ['rule.added', 'rule.edited', 'rule.removed', 'rule.applied'] as const) {
+      const notice = ruleWritten(key, localized, 2);
+      expect(notice.text).toBe(translate(lang, key, {n: 2}));
+      expect(notice.detail).toBe(translate(lang, 'rule.keepsRoute'));
+      expect(`${notice.text} ${notice.detail}`).not.toMatch(/重新載入|重新加载|重載|重载|reload/i);
+    }
+  }
 });
 
 it('says what happens now without presetting it, and when a routing rule changes nothing', () => {

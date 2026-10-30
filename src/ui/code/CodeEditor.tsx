@@ -23,15 +23,15 @@ import {lintGutter, setDiagnostics} from '@codemirror/lint';
 import {highlightSelectionMatches, searchKeymap, gotoLine, openSearchPanel} from '@codemirror/search';
 import {tags} from '@lezer/highlight';
 import {dae} from './dae';
-import {daeCompletion} from './daeComplete';
+import {daeCompletion, type CompletionNames} from './daeComplete';
 import {closeBrackets, closeBracketsKeymap, completionKeymap} from '@codemirror/autocomplete';
 import {toDiagnostics} from './diagnostics';
-import type {GroupEntry} from '../../dae/groups';
 import {readOnlyAttempts} from './readOnlyAttempt';
 import {Button, PrimaryActions} from '../Button';
 import {MenuButton} from '../Menu';
 import {ActionGroup, MoreMenu, type Action} from '../ActionGroup';
 import {useOverflow} from '../hooks';
+import {Toolbar} from '../Toolbar';
 
 // CodeMirror phrase keys are translated through the shared catalogue.
 const cmPhrases: Array<[string, Key]> = [
@@ -226,7 +226,7 @@ export function CodeEditor({
   marks = noMarks,
   focusLine,
   label,
-  outbounds,
+  names,
   onSave,
   onReadOnlyAttempt,
   compact,
@@ -240,8 +240,8 @@ export function CodeEditor({
   marks?: EditorMark[];
   focusLine?: number | null;
   label: string;
-  // Group names to offer after "->"; the caller keeps it current with the text.
-  outbounds?: () => Pick<GroupEntry, 'name' | 'written'>[];
+  // Names to offer after "->"; the caller keeps it current with the text.
+  names?: () => CompletionNames;
   // Mod-S inside the editor; the caller decides what saving means.
   onSave?: () => void;
   // Typing, paste, cut or a touch tap while read-only; the caller explains why the text cannot change.
@@ -266,12 +266,12 @@ export function CodeEditor({
   const view = useRef<EditorView | null>(null);
   // The latest callbacks, read from inside CodeMirror's listeners; updated in an effect, not during render.
   const change = useRef(onChange);
-  const names = useRef(outbounds);
+  const completions = useRef(names);
   const save = useRef(onSave);
   const refused = useRef(onReadOnlyAttempt);
   useEffect(() => {
     change.current = onChange;
-    names.current = outbounds;
+    completions.current = names;
     save.current = onSave;
     refused.current = onReadOnlyAttempt;
   });
@@ -305,7 +305,7 @@ export function CodeEditor({
           indentUnit.of('  '),
           indentOnInput(),
           daeIndent,
-          daeCompletion(() => names.current?.() ?? []),
+          daeCompletion(() => completions.current?.() ?? {groups: [], upstreams: []}),
           dae,
           syntaxHighlighting(highlight),
           theme,
@@ -388,22 +388,40 @@ export function CodeEditor({
   const run = (command: Command) => {
     if (view.current) command(view.current);
   };
+  const foldedTools = collapsed && (
+    <div className="rp-editor-overflow" ref={overflow}>
+      <MoreMenu
+        actions={[
+          {id: 'find', label: t(readOnly ? 'cm.find' : 'cm.findReplace'), onAction: () => requestAnimationFrame(() => run(openSearchPanel))},
+          {id: 'line', label: t('cm.gotoLine'), onAction: () => requestAnimationFrame(() => run(gotoLine))},
+          ...(onChange
+            ? editCommands.map(command => ({
+                id: command.id,
+                label: t(command.label),
+                isDisabled: readOnly,
+                onAction: () => requestAnimationFrame(() => run(command.run))
+              }))
+            : [])
+        ]}
+      />
+    </div>
+  );
   return (
     <>
       {!compact && (
         <div className="rp-editor-head" ref={head}>
           <div className="rp-editor-toolbar">
-            {/* The caller's actions commit or check the source, as a form's do: Buttons in their own row. The editing
-                tools take the row above the text, as action buttons, and fold into a menu where they do not fit. */}
+            {/* Caller actions remain Buttons; folded editing tools trail them without taking another row. */}
             {actions.length > 0 && (
-              <div className="rp-toolbar">
+              <Toolbar>
                 <PrimaryActions>
                   <ActionGroup actions={actions} overflowMode="wrap" />
                 </PrimaryActions>
-              </div>
+                {foldedTools}
+              </Toolbar>
             )}
-            <div className="rp-editor-actions" data-collapsed={collapsed || undefined}>
-              <div className="rp-toolbar" ref={toolbar}>
+            <div className="rp-editor-actions" data-collapsed={collapsed || undefined} data-merged={(collapsed && actions.length > 0) || undefined}>
+              <Toolbar ref={toolbar}>
                 <Button onPress={() => run(openSearchPanel)}>{t(readOnly ? 'cm.find' : 'cm.findReplace')}</Button>
                 <Button onPress={() => run(gotoLine)}>{t('cm.gotoLine')}</Button>
                 {onChange && (
@@ -429,25 +447,8 @@ export function CodeEditor({
                     {t('cm.commands')}
                   </MenuButton>
                 )}
-              </div>
-              {collapsed && (
-                <div className="rp-editor-overflow" ref={overflow}>
-                  <MoreMenu
-                    actions={[
-                      {id: 'find', label: t(readOnly ? 'cm.find' : 'cm.findReplace'), onAction: () => requestAnimationFrame(() => run(openSearchPanel))},
-                      {id: 'line', label: t('cm.gotoLine'), onAction: () => requestAnimationFrame(() => run(gotoLine))},
-                      ...(onChange
-                        ? editCommands.map(command => ({
-                            id: command.id,
-                            label: t(command.label),
-                            isDisabled: readOnly,
-                            onAction: () => requestAnimationFrame(() => run(command.run))
-                          }))
-                        : [])
-                    ]}
-                  />
-                </div>
-              )}
+              </Toolbar>
+              {actions.length === 0 && foldedTools}
             </div>
           </div>
           {banner}

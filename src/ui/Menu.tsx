@@ -8,7 +8,6 @@ import {
   MenuSection,
   MenuTrigger,
   Popover,
-  Separator,
   SubmenuTrigger,
   useLocale,
   TooltipTrigger,
@@ -19,19 +18,20 @@ import ChevronDown from './icons/ChevronDown';
 import {Tip, TextTooltip} from './Tooltip';
 import {buttonClass, useActionReason} from './Button';
 import {Check} from './Check';
-import {smallQuery, useMediaQuery} from './hooks';
+import {smallQuery, useMediaQuery, usePopoverBoundary} from './hooks';
 import {LazySearchList, preloadSearchList} from './LazySearchList';
 import {longList} from './longList';
 import {useT, type Translator} from '../i18n';
 import {ItemText, type Item} from './ItemText';
 import {useControlSize, type ControlSize} from './controlSize';
+import {Divider} from './Divider';
 
 export const pickMenuKey = (on: (k: string) => void) => (k: 'all' | Set<Key>) => {
   if (k === 'all') return;
   const v = [...k][0];
   if (v != null) on(String(v));
 };
-export function MenuChoice({item, children, onAction}: {item: Item; children?: ReactNode; onAction?: () => void}) {
+function MenuChoice({item, children, onAction}: {item: Item; children?: ReactNode; onAction?: () => void}) {
   return (
     <MenuItem id={item.id} className="rp-item" textValue={item.label} onAction={onAction}>
       <Check />
@@ -78,6 +78,7 @@ export function MenuButton({
   ) : null;
   const reason = useActionReason(isDisabled);
   const [tipOpen, setTipOpen] = useState(false);
+  const boundary = usePopoverBoundary();
   const controlSize = useControlSize(size);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const trigger = (
@@ -118,7 +119,7 @@ export function MenuButton({
           <Tip triggerRef={triggerRef}>{reason?.text ?? label}</Tip>
         </TooltipTrigger>
       )}
-      <Popover className="rp-popover rp-list-popover" placement={placement}>
+      <Popover className="rp-popover rp-list-popover" placement={placement} boundaryElement={boundary}>
         {content}
       </Popover>
     </MenuTrigger>
@@ -137,7 +138,7 @@ export type ChoiceSection = {
 };
 // A row that opens its own menu of choices, showing the current one, after S2's ActionMenu with submenus.
 // `searchLabel` names the filter field of a list long enough to get one, by what the submenu lists.
-export type ChoiceSubmenu = {
+type ChoiceSubmenu = {
   label: string;
   icon?: ReactNode;
   sections: ChoiceSection[];
@@ -193,7 +194,7 @@ function SectionMenu({
           ))}
         </MenuSection>
       ))}
-      {actions.length > 0 && <Separator className="rp-hrule" />}
+      {actions.length > 0 && <Divider orientation="horizontal" />}
       {actions.map(action => (
         <ActionItem key={action.label} {...action} />
       ))}
