@@ -275,7 +275,7 @@ Revisit this if S2 stops requiring the macro or the size budgets stop applying.
 ### Add a palette
 
 1. Add an entry to `src/shell/palettes.ts`. The id is `family/flavour`; a family with one flavour repeats its name, as in `nord/nord`.
-2. Add `src/ui/styles/palettes/<family>.css` and import it from `src/ui/styles/palettes.css`. It holds a light block keyed on `:root[data-family='<family>']`, a dark block that adds `[data-scheme='dark']`, and a `[data-flavour]` block for each extra flavour. Each block sets every token in the table below, and `tools/palettes.test.mjs` checks that. Images a palette needs go in `src/ui/styles/palettes/<family>/`, referenced relatively from its stylesheet, with licence entries in `NOTICE` and `REUSE.toml`.
+2. Add `src/ui/styles/palettes/<family>.css` and import it from `src/ui/styles/palettes.css`, or load it on demand as Glass and Halloween do (`src/shell/paletteSheet.ts`) to keep it out of the startup bundle. It holds a light block keyed on `:root[data-family='<family>']`, a dark block that adds `[data-scheme='dark']`, and a `[data-flavour]` block for each extra flavour. Each block sets every token in the table below, and `tools/palettes.test.mjs` checks that. Images a palette needs go in `src/ui/styles/palettes/<family>/`, referenced relatively from its stylesheet, with licence entries in `NOTICE` and `REUSE.toml`.
 3. Add its names under the `palette.*` keys in `en.json` and in every complete language's catalogue (see Translations). A palette may also reword a few statuses: its optional `words` map points a catalogue key at a `palette.*` key of its own, and every `useT` translator reads that key while the palette is on. Components need no palette check.
 4. Add it to the map in `e2e/contrast.spec.ts` and run that spec.
 
@@ -306,9 +306,9 @@ Write the subject and body in English. Use an imperative subject and explain the
 
 Branch from `main`. Keep pull requests small and limited to one theme. Keep CI green.
 
-Use the GitHub issue and pull request templates, including their Chinese variants. Name the human responsible and report only verified results.
+Use the bilingual English / Simplified Chinese GitHub issue and pull request templates. Name the human responsible in an issue, check the boxes that apply in a pull request, and report only verified results.
 
-Write the pull request body in English with one short paragraph under each of `## Problem`, `## How I fixed it` and `## Verified`, in that order: what is wrong, what changed, and what was checked, not the reasoning that led there. Verified lists the commands you ran and what they reported; link long evidence instead of pasting it.
+Write the pull request body in English or Simplified Chinese with one short paragraph under each of `## Problem / 问题`, `## How I fixed it / 解决方法` and `## Verified / 验证`, in that order: what is wrong, what changed, and what was checked, not the reasoning that led there. Verified lists the commands you ran and what they reported; link long evidence instead of pasting it. Start the pull request body from `.github/PULL_REQUEST_TEMPLATE.md`, also when you open it with `gh pr create --body` or the API, which do not fill it in. Keep its checklist and check only true boxes. For an outside contributor, `template-check` closes a pull request that drops a required box or checks the unread or AI-agent box, and reopens it once the body is fixed.
 
 ### Changelog fragments
 
@@ -341,7 +341,7 @@ For attachment or repair, save the current release's asset list, `SHA256SUMS` an
 
 Upload the staged additions or replacements to the existing release, then refresh its manifest and notes. Recheck every API asset digest and the final asset list; remove obsolete honk sources only after the replacement uploads succeed. Multi-asset uploads are not atomic: retain the saved bytes and retry interrupted uploads with that same set. Never move an existing numbered doona or honk tag, rebuild the standalone UI during repair, or rerun the first-phase workflow to repair honk. Honk's existing rolling `debug` alias may still advance during its normal release workflow.
 
-For tag `v0.1.0-rc.3`, release assets keep the upstream version without `v`. See the
+For tag `v0.1.0-rc.4`, release assets keep the upstream version without `v`. See the
 [package version table](install/README.md#version-spellings) for every archive, binary package and source recipe.
 
 #### Release body

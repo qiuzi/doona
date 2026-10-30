@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // Layout adapted from the Astryx settings template; see ASTRYX-TEMPLATES-LICENSE.
 
+import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {lazy, startTransition, Suspense, useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 
@@ -24,7 +25,7 @@ import {useExportDraft} from './ui/exportDraft';
 import {RuleList} from './RuleList';
 import {ruleReview} from './ruleReview';
 import {useDraftBase, useFocusRefresh, useRead, useTask} from './state';
-import {Feedback, ReadState, useNoticeToast} from './ui';
+import {Feedback, ReadOnlyNote, ReadState, useNoticeToast} from './ui';
 import {hasPendingRuleCommand, requestPageCommand, useCommand} from './ui/commands';
 import {DraftBar} from './ui/DraftBar';
 import {useDraftGuard} from './ui/draftGuard';
@@ -206,7 +207,7 @@ export function Routing({connection, setBusy}: {connection: Connection; setBusy:
                   <Heading level={2}>{t.mode}</Heading>
                 </VStack>
                 <VStack gap={pageRhythm.section}>
-                  {ready && !writable && <Text>{t.readOnly}</Text>}
+                  {ready && !writable && <ReadOnlyNote />}
                   <RowEntrance>
                     <Grid
                       ref={group}
@@ -261,7 +262,16 @@ export function Routing({connection, setBusy}: {connection: Connection; setBusy:
                         onChange={value => setDraft({mode: 'global', target: value})}
                       />
                     )}
-                    {shown.mode === 'global' && !target && <Text>{t.noTarget}</Text>}
+                    {shown.mode === 'global' && !target && (
+                      <Banner status="warning" title={t.noTarget} collapsible={false}>
+                        <VStack gap={3}>
+                          <Text>{t.groupGuidanceRouting}</Text>
+                          <HStack>
+                            <Button label={t.groupGuidanceOpen} variant="secondary" onClick={() => (location.hash = 'groups')} />
+                          </HStack>
+                        </VStack>
+                      </Banner>
+                    )}
                   </Crossfade>
                 </VStack>
               </VStack>

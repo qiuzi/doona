@@ -15,13 +15,14 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {Text} from '@astryxdesign/core/Text';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
-import {useCallback, useContext, useRef, useState, type ComponentProps, type ReactNode} from 'react';
-import type {Connection} from './api';
+import {lazy, Suspense, useCallback, useContext, useRef, useState, type ComponentProps, type ReactNode} from 'react';
+import {errorKey, type Connection} from './api';
+import {docsHref} from './docs';
 import {DraftContext} from './ui/draftGuard';
 import {ExportDraftContext, type ExportDraft} from './ui/exportDraft';
 import {useConfigExport} from './ConfigExport';
 import {pageChunks} from './preload';
-import {useMessages} from './i18n';
+import {LocaleContext, useMessages} from './i18n';
 import {finished, settle} from './operations';
 import {useRead, useTask} from './state';
 import {useNoticeToast} from './ui';
@@ -29,6 +30,9 @@ import {BrandMark} from './ui/BrandMark';
 import {EditDialog} from './ui/EditDialog';
 import {useCommand} from './ui/commands';
 import {GlobeGrid, Layers, Link, Location, Path, Search, Settings} from './ui/icons';
+import {ReportShortcut} from './ui/ReportShortcut';
+
+const AboutDialog = lazy(() => import('./AboutDialog').then(module => ({default: module.AboutDialog})));
 
 export type Screen = 'nodes' | 'groups' | 'subscriptions' | 'routing' | 'dns';
 const sections = [
@@ -107,6 +111,7 @@ function ShellContent({
   const task = useTask(setBusy);
   useNoticeToast(task.notice);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const resources = connection.capabilities.resources;
   const applicable = (kind: 'suspend' | 'resume' | 'reload') =>
     resources.operations.available &&
@@ -139,6 +144,7 @@ function ShellContent({
     onClick: () => (kind === 'suspend' ? setPauseOpen(true) : act(kind))
   }));
   if (resources.config.available && !busy && !exporter.pending) actions.push({label: t.exportConfig, onClick: exporter.start});
+  actions.push({label: t.about, onClick: () => setAboutOpen(true)});
   useCommand(command => {
     const kind = command.replace('backend:', '');
     if (command.startsWith('backend:') && ['suspend', 'resume', 'reload'].includes(kind) && applicable(kind as 'suspend' | 'resume' | 'reload')) {
@@ -155,6 +161,15 @@ function ShellContent({
         : state
           ? states[state]
           : 'connected';
+  // What the status leaves out: the failed read, the failed reload or the engine's degradations.
+  const cause = runtime.error
+    ? t[errorKey(runtime.error)]
+    : statusKey === 'reloadFailed'
+      ? runtime.data?.last_reload?.error?.message
+      : statusKey === 'backendDegraded' || statusKey === 'shellFailed'
+        ? runtime.data?.degradations?.map(item => item.message).join('\n')
+        : undefined;
+  const troubled = ['shellDisconnected', 'reloadFailed', 'backendDegraded', 'shellFailed'].includes(statusKey);
   const statusTone =
     busy || state === 'reloading'
       ? 'accent'
@@ -185,6 +200,7 @@ function ShellContent({
             <>
               <ColorModeToggle />
               <LanguageMenu />
+              <ReportShortcut />
             </>
           }
           footer={
@@ -193,6 +209,8 @@ function ShellContent({
                 address={connection.address === 'mock' ? t.demoName : connection.address}
                 label={runtime.loading && !runtime.data && !busy ? t.loading : t[statusKey]}
                 tone={statusTone}
+                cause={cause}
+                docs={troubled}
                 actions={actions}
                 pending={task.busy !== null || runtime.loading}
               />
@@ -231,6 +249,11 @@ function ShellContent({
     >
       <DraftContext value={trackDirty}>{children}</DraftContext>
       {exporter.dialog}
+      {aboutOpen && (
+        <Suspense fallback={null}>
+          <AboutDialog connection={connection} close={() => setAboutOpen(false)} />
+        </Suspense>
+      )}
       <EditDialog
         open={pauseOpen}
         title={t.pauseBackend}
@@ -264,16 +287,21 @@ function BackendStatus({
   address,
   label,
   tone,
+  cause,
+  docs,
   actions,
   pending
 }: {
   address: string;
   label: string;
   tone: ComponentProps<typeof StatusDot>['variant'];
+  cause?: string;
+  docs: boolean;
   actions: Array<{label: string; onClick: () => void}>;
   pending: boolean;
 }) {
   const t = useMessages();
+  const locale = useContext(LocaleContext);
   const {isCollapsed} = useSideNavCollapse();
   const status = (
     <VStack gap={0} align="start">
@@ -316,10 +344,22 @@ function BackendStatus({
         )
       }
     >
-      <DropdownMenuGroup title={status}>
+      <DropdownMenuGroup
+        title={
+          <VStack gap={1} align="start">
+            {status}
+            {cause && (
+              <Text type="supporting" color="secondary" style={{whiteSpace: 'pre-line', overflowWrap: 'anywhere'}}>
+                {cause}
+              </Text>
+            )}
+          </VStack>
+        }
+      >
         {actions.map(action => (
           <DropdownMenuItem key={action.label} {...action} />
         ))}
+        {docs && <DropdownMenuItem label={t.docsLink} href={docsHref(locale, 'no-native-api')} target="_blank" />}
       </DropdownMenuGroup>
     </DropdownMenu>
   );

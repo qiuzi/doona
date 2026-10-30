@@ -2,13 +2,16 @@ import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {Layout, LayoutContent, LayoutHeader, VStack} from '@astryxdesign/core/Layout';
 import astryxZhCN from '@astryxdesign/core/locales/zh-CN.generated.js';
 import astryxZhTW from '@astryxdesign/core/locales/zh-TW.generated.js';
+import {Button} from '@astryxdesign/core/Button';
+import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Theme} from '@astryxdesign/core/theme';
-import {Activity, lazy, memo, startTransition, Suspense, useEffect, useMemo, useState} from 'react';
+import {Activity, lazy, memo, startTransition, Suspense, useContext, useEffect, useMemo, useState} from 'react';
 import type {Connection} from './api';
 import {PreferencesContext, type Mode} from './app/preferences';
 import {Connect} from './Connect';
-import {catalogs, LocaleContext, type Locale} from './i18n';
+import {docsHref, type DocsAnchor} from './docs';
+import {catalogs, LocaleContext, useMessages, type Locale, type MessageKey} from './i18n';
 import {commandsChunk, settingsChunk, pageChunks, warmGlyphsDuringIdle} from './preload';
 import {Shell, type Screen} from './Shell';
 import {siteTheme} from './themes/site/site';
@@ -29,6 +32,13 @@ const SettingsDialog = settingsChunk.Component;
 const Commands = commandsChunk.Component;
 
 const screens: Screen[] = ['groups', 'subscriptions', 'nodes', 'routing', 'dns'];
+// What a page the backend does not offer needs, and the feature requirements section on enabling it.
+const unavailable: Record<'nodes' | 'groups' | 'providers' | 'config', {need: MessageKey; docs: DocsAnchor}> = {
+  nodes: {need: 'needNodes', docs: 'req-nodes'},
+  providers: {need: 'needProviders', docs: 'req-nodes'},
+  groups: {need: 'needGroups', docs: 'req-group-selection'},
+  config: {need: 'needConfig', docs: 'req-config-edit'}
+};
 const messages = {'zh-CN': astryxZhCN, 'zh-TW': astryxZhTW};
 function preference<T extends string>(key: string, choices: readonly T[], fallback: T): T {
   try {
@@ -81,6 +91,8 @@ export default function App() {
   }, [connection]);
   const [commands, setCommands] = useState<'palette' | 'help' | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsMounted, setSettingsMounted] = useState(false);
+  if (settingsOpen && !settingsMounted) setSettingsMounted(true);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [leaving, setLeaving] = useState<Screen | null>(null);
@@ -117,6 +129,13 @@ export default function App() {
   useEffect(() => warmGlyphsDuringIdle(t.pending), [t.pending]);
   useEffect(() => {
     const changed = () => {
+      const target = location.hash.slice(1);
+      const anchor = screens.includes(target as Screen) ? null : document.getElementById(target);
+      if (anchor) {
+        history.replaceState(null, '', `#${screen}`);
+        anchor.focus();
+        return;
+      }
       if (busy) history.replaceState(null, '', `#${screen}`);
       else if (dirty && route() !== screen) {
         const next = route();
@@ -222,14 +241,14 @@ export default function App() {
                                 {page === 'dns' && <Dns connection={connection} setBusy={setBusy} />}
                               </Suspense>
                             ) : (
-                              <UnavailablePage title={t[page]} message={t.unsupported} />
+                              <UnavailablePage title={t[page]} message={t[unavailable[resource].need]} docs={unavailable[resource].docs} />
                             )}
                           </Activity>
                         );
                       })}
-                    {settingsOpen && (
+                    {settingsMounted && (
                       <Suspense fallback={null}>
-                        <SettingsDialog isOpen connection={connection} setBusy={setBusy} close={() => setSettingsOpen(false)} />
+                        <SettingsDialog isOpen={settingsOpen} connection={connection} setBusy={setBusy} close={() => setSettingsOpen(false)} />
                       </Suspense>
                     )}
                     {commands && (
@@ -275,7 +294,9 @@ export default function App() {
   );
 }
 
-function UnavailablePage({title, message}: {title: string; message: string}) {
+function UnavailablePage({title, message, docs}: {title: string; message: string; docs: DocsAnchor}) {
+  const t = useMessages();
+  const locale = useContext(LocaleContext);
   const ready = true;
   const motion = usePageMotion(ready);
   return (
@@ -291,7 +312,11 @@ function UnavailablePage({title, message}: {title: string; message: string}) {
       content={
         <LayoutContent className="lite-page-content">
           <VStack ref={motion.body}>
-            <Text>{message}</Text>
+            <EmptyState
+              title={t.unsupported}
+              description={message}
+              actions={<Button label={t.docsLink} variant="secondary" href={docsHref(locale, docs)} target="_blank" />}
+            />
           </VStack>
         </LayoutContent>
       }
