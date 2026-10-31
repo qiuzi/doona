@@ -76,6 +76,99 @@ it('holds a game service above a listed all-games rule, and other services befor
   ]);
 });
 
+describe('placement above broad catch-alls', () => {
+  const regions = [
+    'domain(geosite:category-ads-all) -> block',
+    'dip(geoip:private) -> direct',
+    'domain(geosite:google-cn, geosite:category-games@cn) -> direct',
+    'domain(geosite:telegram) -> proxy',
+    'domain(geosite:category-games) -> direct',
+    'domain(geosite:gfw) -> proxy',
+    'domain(geosite:cn) -> direct',
+    'dip(geoip:cn) -> direct'
+  ];
+  const list = (lines: string[]) => {
+    const content = `routing {\n${[...lines, 'fallback: direct'].map(line => `  ${line}\n`).join('')}}\n`;
+    const rules = [...lines, 'fallback: direct'].map((line, i) => {
+      const [expression, outbound = 'direct'] = line.split(' -> ');
+      return {...rule(expression, i + 2, i === lines.length ? 'fallback' : 'rule'), outbound};
+    });
+    return {content, rules};
+  };
+  it.each([
+    {
+      name: 'a media service above the first regional rule',
+      lines: regions.filter(line => !line.includes(':category-games)')),
+      selected: ['netflix'],
+      above: 'domain(geosite:gfw)'
+    },
+    {name: 'a game above an all-games rule listed before the regional rules', lines: regions, selected: ['steam'], above: 'domain(geosite:category-games)'},
+    {name: 'a non-game service past an all-games rule', lines: regions, selected: ['netflix'], above: 'domain(geosite:gfw)'},
+    {name: 'a service above dip(geoip:!cn)', lines: ['dip(geoip:!cn) -> proxy'], selected: ['openai'], above: 'dip(geoip:!cn)'},
+    {
+      name: 'a service above geolocation-!cn',
+      lines: ['domain(suffix: example.com, geosite:geolocation-!cn) -> proxy'],
+      selected: ['openai'],
+      above: 'domain(suffix: example.com, geosite:geolocation-!cn)'
+    },
+    {name: 'a service before the fallback with no catch-all', lines: regions.slice(0, 3), selected: ['netflix'], above: 'fallback: direct'},
+    {
+      name: 'Telegram and its IP rule above gfw, keeping their order',
+      lines: ['domain(geosite:gfw) -> proxy'],
+      selected: ['telegram', 'youtube'],
+      above: 'domain(geosite:gfw)'
+    }
+  ])('places $name', ({lines, selected, above}) => {
+    const {content, rules} = list(lines);
+    const result = build(content, {rules, selected, steamCn: true});
+    expect(result.rules.filter(item => item.list === 'routing').map(item => item.before?.expression)).toEqual(
+      result.rules.filter(item => item.list === 'routing').map(() => above)
+    );
+  });
+  it('keeps the order of several services and the Steam China rule under one anchor', () => {
+    const {content, rules} = list(regions.filter(line => !line.includes(':category-games)')));
+    const result = build(content, {rules, selected: ['category-games', 'telegram', 'netflix', 'steam'], steamCn: true});
+    expect(result.rules.filter(item => item.list === 'routing').map(item => [item.condition, item.before?.expression])).toEqual([
+      ['domain(geosite:steam@cn)', 'domain(geosite:gfw)'],
+      ['domain(geosite:steam)', 'domain(geosite:gfw)'],
+      ['domain(geosite:netflix)', 'domain(geosite:gfw)'],
+      ['domain(geosite:category-games)', 'domain(geosite:gfw)']
+    ]);
+  });
+  it('ignores a catch-all in another source', () => {
+    const {content, rules} = list(['dip(geoip:private) -> direct']);
+    const other = {...rule('domain(geosite:gfw)', 2, 'rule', 'other'), outbound: 'proxy'};
+    const result = build(content, {
+      rules: [other, ...rules],
+      sources: [source(content), source('routing {\n  domain(geosite:gfw) -> proxy\n}\n', 'other')],
+      selected: ['netflix']
+    });
+    expect(result.rules.map(item => item.before?.kind)).toEqual(['fallback']);
+  });
+});
+
+describe('games covered by an all-games rule', () => {
+  const content = 'routing {\n  domain(geosite:category-games) -> proxy\n  fallback: direct\n}\n';
+  const games = {...rule('domain(geosite:category-games)', 2), outbound: 'proxy'};
+  const fallback = rule('fallback: direct', 3, 'fallback');
+  const heldGames = build(undefined, {selected: ['category-games'], outbound: 'proxy'}).rules;
+  it.each([
+    {name: 'a listed rule to the chosen outbound', rules: [games, fallback], held: [], outbound: 'proxy', covered: true},
+    {name: 'a quoted chosen outbound', rules: [games, fallback], held: [], outbound: "'proxy'", covered: true},
+    {name: 'a held rule to the chosen outbound', rules: [fallback], held: heldGames, outbound: 'proxy', covered: true},
+    {name: 'a listed rule to another outbound', rules: [games, fallback], held: [], outbound: 'direct', covered: false},
+    {name: 'no all-games rule', rules: [fallback], held: [], outbound: 'proxy', covered: false}
+  ])('skips Steam for $name: $covered', ({rules, held, outbound, covered}) => {
+    const result = build(content, {rules, held, outbound, selected: ['steam', 'netflix']});
+    expect(result.skipped.some(item => item.service === 'steam' && item.covered)).toBe(covered);
+    expect(result.skipped.some(item => item.service === 'netflix')).toBe(false);
+    expect(result.rules.map(item => item.condition)).toEqual([...(covered ? [] : ['domain(geosite:steam)']), 'domain(geosite:netflix)']);
+  });
+  it('reports the all-games service itself as an existing rule', () => {
+    expect(build(content, {rules: [games, fallback], outbound: 'proxy'}).skipped).toContainEqual({service: 'category-games', rule: games});
+  });
+});
+
 it.each(['direct', 'block'])('does not add Steam China direct for builtin %s', outbound => {
   const result = build(undefined, {selected: ['steam'], steamCn: true, outbound});
   expect(result.rules.map(item => item.condition)).toEqual(['domain(geosite:steam)']);
@@ -102,7 +195,7 @@ describe('duplicates', () => {
     const first = build(undefined, {selected: ['steam']});
     const again = build(undefined, {selected: ['steam'], held: first.rules});
     expect(again.rules).toEqual([]);
-    expect(again.skipped).toContainEqual({service: 'steam', held: true});
+    expect(again.skipped).toContainEqual({service: 'steam', held: first.rules[0]});
   });
   it('does not queue Steam China direct again when a held rule already has it', () => {
     const first = build(undefined, {selected: ['steam'], steamCn: true});
