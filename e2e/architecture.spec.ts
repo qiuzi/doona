@@ -567,13 +567,12 @@ test('a completed provider creation cannot close a newer node draft or clear its
   await provider.getByRole('button', {name: 'Add', exact: true}).click();
   await submitted;
   await provider.getByRole('button', {name: 'Cancel', exact: true}).click();
-  await page.getByRole('button', {name: 'Paste node link', exact: true}).click();
+  await page.getByRole('button', {name: 'Add node', exact: true}).click();
   const node = page.getByRole('dialog');
-  await node.getByLabel('Name', {exact: true}).fill('new-draft');
   await node.getByLabel('Node link', {exact: true}).fill('vless://uuid@example.org:443');
   release();
   await expect(page.locator('.rp-toast.positive')).toContainText('slow-provider added and updated');
-  await expect(node.getByLabel('Name', {exact: true})).toHaveValue('new-draft');
+  await expect(node.getByLabel('Node link', {exact: true})).toHaveValue('vless://uuid@example.org:443');
   await page.evaluate(() => {
     location.hash = '#/settings';
   });
@@ -696,15 +695,13 @@ test('node creation freezes its submitted draft until the response arrives', asy
     await route.fulfill({json: await api.createNode(route.request().postDataJSON())});
   });
   await page.goto('/#/nodes?provider=inline');
-  await page.getByRole('button', {name: 'Paste node link', exact: true}).click();
+  await page.getByRole('button', {name: 'Add node', exact: true}).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill('submitted-node');
   await dialog.getByLabel('Node link').fill('vless://uuid@example.com:443?security=tls#submitted-node');
   const request = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/nodes'));
   await dialog.getByRole('button', {name: 'Add', exact: true}).click();
   await request;
   try {
-    await expect(dialog.getByLabel('Name')).toBeDisabled();
     await expect(dialog.getByLabel('Node link')).toBeDisabled();
   } finally {
     release();

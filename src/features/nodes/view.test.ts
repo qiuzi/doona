@@ -20,10 +20,13 @@ import {
   providerChanges,
   renameReferences,
   selectedProvider,
-  joinableGroups
+  joinableGroups,
+  joinNodesToGroups,
+  customGroup
 } from './view';
 import {translate, type Translator} from '../../i18n';
 import {readNodeEntries} from '../../dae/nodes';
+import {readGroupEntries} from '../../dae/groups';
 import {createMockApi} from '../../../mock';
 import {nodeFixtures} from '../../../mock/fixtures';
 import {formatBytes} from '../../i18n/format';
@@ -621,4 +624,72 @@ it.each([
   const entry = readSubscriptionEntries("subscription {\n  harbor: 'https://example.org/sub'\n}")[0];
   const form = {name: entry.tag, value: entry.url, interval: '', agent: '', cache: null, route: '', ...change};
   expect(providerChanges(form, entry, defaultCache)[field]).toBe(edited);
+});
+
+describe('joining added nodes to groups', () => {
+  const text = [
+    'group {',
+    '    hk {',
+    '        filter: name(a)',
+    '        filter: subtag(sub)',
+    '        policy: min',
+    '    }',
+    '    jp {',
+    "        filter: name('b c')",
+    '        policy: min',
+    '    }',
+    '    all {',
+    '        policy: min',
+    '    }',
+    '    empty {',
+    "        filter: !name(regex: '.*')",
+    '        policy: min',
+    '    }',
+    '    most {',
+    '        filter: !name(direct, block)',
+    '        policy: min',
+    '    }',
+    '}',
+    ''
+  ].join('\n');
+  const filtersAfter = (groups: string[], names: string[]) => {
+    const out = joinNodesToGroups(text, groups, names);
+    return out && Object.fromEntries(readGroupEntries(out).map(entry => [entry.name, entry.filters]));
+  };
+  it.each([
+    ['one group, one node', ['hk'], ['x'], {hk: ['name(a, x)', 'subtag(sub)']}],
+    ['two groups, two nodes', ['hk', 'jp'], ['x', 'y z'], {hk: ["name(a, x, 'y z')", 'subtag(sub)'], jp: ["name('b c', 'x', 'y z')"]}],
+    ['a node already listed', ['hk'], ['a'], {hk: ['name(a)', 'subtag(sub)']}],
+    ['a group that holds every node', ['all', 'most'], ['x'], {all: [], most: ['!name(direct, block)']}]
+  ])('%s', (_, groups, names, expected) => {
+    expect(filtersAfter(groups, names)).toMatchObject(expected);
+  });
+  it('drops the empty placeholder once a node joins', () => {
+    expect(filtersAfter(['empty'], ['x'])).toMatchObject({empty: ['name(x)']});
+  });
+  it('leaves the other groups as written', () => {
+    expect(filtersAfter(['hk'], ['x'])).toMatchObject({jp: ["name('b c')"], all: []});
+  });
+  it.each([
+    ['a missing group', ['gone'], ['x']],
+    ['a name that cannot be written', ['hk'], ['a\nb']]
+  ])('refuses %s', (_, groups, names) => {
+    expect(joinNodesToGroups(text, groups, names)).toBeNull();
+  });
+});
+
+it.each([
+  ['exact names', ["name('a', b)"], true],
+  ['several exact lines', ['name(a)', "name('b c')"], true],
+  ['the empty placeholder', ["!name(regex: '.*')"], true],
+  ['names with the placeholder', ['name(a)', "!name(regex: '.*')"], true],
+  ['no filter line', [], false],
+  ['a subscription', ['name(a)', 'subtag(sub)'], false],
+  ['a regex', ["name(regex: '^hk')"], false],
+  ['a keyword', ['name(keyword: hk)'], false],
+  ['a nested group', ['group(hk)'], false],
+  ['every node but direct and block', ['!name(direct, block)'], false],
+  ['a combined rule', ['name(a) && !name(b)'], false]
+])('offers a group to join only if it is custom: %s', (_, filters, expected) => {
+  expect(customGroup({filters})).toBe(expected);
 });

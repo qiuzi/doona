@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {emptyNode, nodeLink, parseNodeLink, protocols} from '../src/nodeForm';
+import {emptyNode, nodeLink, parseNodeLink, protocols} from '../../../src/dae/nodeForm';
 const uuid = 'b831381d-6324-4d53-ad4f-8cda48b30811';
 const b64 = (s: string) => Buffer.from(s).toString('base64url');
 // Accepted vectors from honk-config/tests/share_link.rs at 40b11281b, plus edit invariants.
@@ -138,6 +138,7 @@ it('editing the VMess cipher removes a conflicting security cipher alias', () =>
   const parsed = parseNodeLink(`vmess://${b64(`auto:${uuid}@example.com:443`)}?security=auto&tls=1`);
   const link = nodeLink({...parsed.fields, method: 'aes-128-gcm'}, parsed.document);
   expect(link).not.toContain('security=auto');
+  expect(Buffer.from(link.slice(8).split('?')[0], 'base64').toString()).toBe(`${uuid}@example.com:443`);
   expect(parseNodeLink(link).fields.method).toBe('aes-128-gcm');
   expect(parseNodeLink(link).fields.security).toBe('tls');
 });

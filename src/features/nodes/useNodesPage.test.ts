@@ -14,6 +14,8 @@ const store = vi.hoisted(() => ({
   nodes: [] as Node[],
   providers: [] as Provider[],
   sources: [] as ConfigSource[],
+  fresh: [] as ConfigSource[],
+  apply: vi.fn(),
   refetchNodes: vi.fn(),
   refetchProviders: vi.fn(),
   refetchConfig: vi.fn(),
@@ -42,15 +44,17 @@ vi.mock('../../store', async () => ({
   useProviders: () => ({data: {providers: store.providers}, refetch: store.refetchProviders, loading: false, error: null}),
   useOutboundNames: () => [],
   useProviderRefresh: () => ({refresh: vi.fn()}),
-  useVersion: () => ({data: version})
+  useVersion: () => ({data: version}),
+  readConfigFresh: () => Promise.resolve({sources: store.fresh})
 }));
+vi.mock('../../api/index', async original => ({...(await original<typeof import('../../api/index')>()), getApi: () => ({})}));
 vi.mock('../../store/config', () => ({
   useCompleteness: () => () => true,
   useConfig: () => ({data: {sources: store.sources}, refetch: store.refetchConfig, loading: false})
 }));
 vi.mock('../../store/mainSource', async original => ({
   ...(await original<typeof import('../../store/mainSource')>()),
-  useMainSourceEdit: () => ({writable: false, busy: false, apply: vi.fn()})
+  useMainSourceEdit: () => ({writable: false, busy: false, apply: store.apply})
 }));
 vi.mock('../../shell/draft', async original => ({
   ...(await original<typeof import('../../shell/draft')>()),
@@ -101,6 +105,8 @@ beforeEach(() => {
   store.nodes = [];
   store.providers = [];
   store.sources = [];
+  store.fresh = [];
+  store.apply.mockReset();
   store.removeNode.mockReset();
 });
 afterEach(() => vi.clearAllMocks());
@@ -159,7 +165,7 @@ it('lands a result in the dialog that sent it', async () => {
 
 it('explains empty add forms and shows an edited unsupported link on its field', () => {
   read().addNode!();
-  expect(read()).toMatchObject({formValid: false, formReason: 'Enter a name', nodeLinkError: null});
+  expect(read()).toMatchObject({formValid: false, formReason: expect.stringContaining('node link'), nodeLinkError: null});
   read().setForm({...read().form, name: 'first', value: 'garbage://x'});
   expect(read().nodeLinkError).toBeTruthy();
   expect(read().formValid).toBe(false);
@@ -168,16 +174,72 @@ it('explains empty add forms and shows an edited unsupported link on its field',
   expect(read()).toMatchObject({formValid: false, formReason: 'Enter a name'});
 });
 
-it('puts a duplicate-name refusal on Name and clears it after the name changes', async () => {
+const fillManual = (fields: Record<string, string>) => Object.entries(fields).forEach(([key, value]) => read().setDraftField(key, value));
+const trojan = {protocol: 'trojan', name: 'manual', host: 'example.com', port: '443', password: 'pw'};
+
+it('adds a node from the manual fields under its typed name, each tab keeping its own input', async () => {
+  store.addNode = vi.fn().mockResolvedValue({id: 'n1', name: 'manual'});
+  read().addNode!();
+  read().setNodeLink('vless://one#pasted');
+  read().setAddMode('manual');
+  expect(read()).toMatchObject({formValid: false, formReason: 'Fill in the required fields.'});
+  fillManual(trojan);
+  expect(read()).toMatchObject({formValid: true, newName: 'manual', nodeValue: 'trojan://pw@example.com:443?security=tls&type=tcp#manual'});
+  read().setAddMode('link');
+  expect(read()).toMatchObject({newName: 'pasted', formValid: true});
+  expect(read().form.value).toBe('vless://one#pasted');
+  read().setAddMode('manual');
+  const close = vi.fn();
+  await read().submit(close);
+  expect(store.addNode).toHaveBeenCalledExactlyOnceWith({name: 'manual', link: 'trojan://pw@example.com:443?security=tls&type=tcp#manual'});
+  expect(close).toHaveBeenCalledOnce();
+  expect(toast).toHaveBeenCalledWith('positive', 'manual added');
+});
+
+it('refuses a manual name that is empty, taken or cannot be written, and starts both tabs empty when reopened', () => {
+  store.nodes = [{id: 'n1', name: 'taken'} as Node];
+  read().addNode!();
+  read().setAddMode('manual');
+  fillManual({...trojan, name: ''});
+  expect(read()).toMatchObject({formValid: false, formReason: 'Enter a name'});
+  for (const [name, error] of [
+    ['taken', 'A node already uses this name.'],
+    ['two\nlines', expect.any(String)]
+  ] as const) {
+    read().setDraftField('name', name);
+    expect(read()).toMatchObject({formValid: false, nodeNameError: error});
+  }
+  read().setDialog(null);
+  read().addNode!();
+  expect(read()).toMatchObject({addMode: 'link', draft: {protocol: 'vless', name: '', host: ''}, nodeValue: ''});
+});
+
+it('builds the manual link from the fields shown, and keeps the name and address when the protocol changes', () => {
+  read().addNode!();
+  read().setAddMode('manual');
+  fillManual({...trojan, type: 'ws', path: '/ws'});
+  expect(read().nodeValue).toBe('trojan://pw@example.com:443?security=tls&type=ws&path=%2Fws#manual');
+  read().setDraftField('type', 'tcp');
+  expect(read().nodeValue).toBe('trojan://pw@example.com:443?security=tls&type=tcp#manual');
+  read().setDraftField('protocol', 'tuic');
+  expect(read()).toMatchObject({draft: {protocol: 'tuic', name: 'manual', host: 'example.com', password: ''}, nodeValue: ''});
+  fillManual({username: 'b831381d-6324-4d53-ad4f-8cda48b30811', password: 'pw'});
+  expect(read().nodeValue).toBe('tuic://b831381d-6324-4d53-ad4f-8cda48b30811:pw@example.com:443#manual');
+  read().setDraftField('username', 'not-a-uuid');
+  expect(read().nodeValue).toBe('');
+});
+
+it('puts a duplicate-name refusal on the link field and clears it after the derived name changes', async () => {
   const {ApiError} = await import('../../api/error');
   store.addNode = async () => {
     throw new ApiError(409, 'state_conflict', 'An inline node named first already exists');
   };
   read().addNode!();
-  read().setForm({...read().form, name: 'first', value: 'vless://first'});
+  read().setNodeLink('vless://one#first');
+  expect(read().newName).toBe('first');
   await read().submit(vi.fn());
   expect(read()).toMatchObject({nodeNameError: 'A node already uses this name.', problem: null, formValid: false});
-  read().setForm({...read().form, name: 'second'});
+  read().setNodeLink('vless://one#second');
   expect(read()).toMatchObject({nodeNameError: null, formValid: true});
 });
 
@@ -317,4 +379,78 @@ it('refuses a protected-only selection and filters protected nodes from a mixed 
   expect(store.removeNode).toHaveBeenCalledExactlyOnceWith(manual.id);
   expect(store.deselect).toHaveBeenCalledExactlyOnceWith(manual.id);
   expect(close).toHaveBeenCalledOnce();
+});
+
+// Adding a node rewrites the configuration, so the groups are joined against the source read after the add.
+it('joins the added node to the picked groups in the source as it is after the add', async () => {
+  const at = (digest: string, filter: string) =>
+    ({
+      id: 'main',
+      kind: 'main',
+      writable: true,
+      content_sha256: digest,
+      content: `group {\n    mine {\n        filter: ${filter}\n        policy: min\n    }\n}\n`
+    }) as ConfigSource;
+  store.sources = [at('before', 'name(a)')];
+  store.addNode = async () => {
+    store.fresh = [at('after', 'name(a)')];
+    return {id: 'n1', name: 'first'} as Node;
+  };
+  store.apply.mockResolvedValue({kind: 'ok'});
+  read().addNode!();
+  read().setNodeLink('vless://one#first');
+  read().setJoinPicked(['mine']);
+  expect(read().joinChoices).toEqual([{id: 'mine', label: 'mine'}]);
+  await read().submit(vi.fn());
+  expect(store.apply).toHaveBeenCalledTimes(1);
+  const [transform, origin] = store.apply.mock.calls[0];
+  expect(origin).toBe(store.fresh[0]);
+  expect(transform(origin.content)).toContain('name(a, first)');
+  expect(vi.mocked(toast)).toHaveBeenCalledWith('positive', 'first added to mine');
+});
+
+it('keeps the node and says so when joining the groups fails', async () => {
+  store.sources = [
+    {id: 'main', kind: 'main', writable: true, content_sha256: 'x', content: 'group {\n    mine {\n        filter: name(a)\n    }\n}\n'} as ConfigSource
+  ];
+  store.addNode = async () => {
+    store.fresh = store.sources;
+    return {id: 'n1', name: 'first'} as Node;
+  };
+  store.apply.mockResolvedValue({kind: 'cancelled'});
+  const close = vi.fn();
+  read().addNode!();
+  read().setNodeLink('vless://one#first');
+  read().setJoinPicked(['mine']);
+  await read().submit(close);
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(toast)).toHaveBeenCalledWith('negative', expect.stringContaining('joining the selected groups failed'), expect.anything());
+});
+
+it('names the refused lines in the toast when joining the groups is refused', async () => {
+  store.sources = [
+    {
+      id: 'main',
+      kind: 'main',
+      path: '/etc/dae/config.dae',
+      writable: true,
+      content_sha256: 'x',
+      content: 'group {\n    mine {\n        filter: name(a)\n    }\n}\n'
+    } as ConfigSource
+  ];
+  store.addNode = async () => {
+    store.fresh = store.sources;
+    return {id: 'n1', name: 'first'} as Node;
+  };
+  store.apply.mockResolvedValue({
+    kind: 'invalid',
+    diagnostics: [{level: 'error', source_id: 'main', line: 3, column: 9, span: null, code: 'unsupported_value', message: 'filter: bad term'}]
+  });
+  read().addNode!();
+  read().setNodeLink('vless://one#first');
+  read().setJoinPicked(['mine']);
+  await read().submit(vi.fn());
+  expect(vi.mocked(toast)).toHaveBeenCalledWith('negative', expect.stringContaining('joining the selected groups failed'), {
+    detail: 'config.dae line 3: Unsupported value: filter: bad term'
+  });
 });

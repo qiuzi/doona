@@ -1,4 +1,4 @@
-import {lazy, Suspense, type FormEvent} from 'react';
+import {type ComponentProps, lazy, Suspense, useEffect, type FormEvent} from 'react';
 import {useT} from '../../i18n';
 import {
   Button,
@@ -19,13 +19,21 @@ import {
 } from '../../ui/ui';
 import {TextArea} from '../../ui/TextArea';
 import {DataTable} from '../../ui/Table';
+import {SearchMultiSelect} from '../../ui/SearchMultiSelect';
+import {BackendText} from '../shared/BackendText';
 import {NodeLatency} from './Latency';
 import type {PageProps} from '../../shell/routes';
 import {ProviderCards} from './ProviderCards';
 import {NodeTable} from './NodeTable';
 import {useNodesPage} from './useNodesPage';
+import type {XhttpOptions as XhttpOptionsType} from './XhttpOptions';
+import {preloadable} from '../../ui/preloadable';
 // Dialog-only fields load when their editor opens, not with the node list.
-const XhttpOptions = lazy(() => import('./XhttpOptions').then(module => ({default: module.XhttpOptions})));
+// The XHTTP fields appear under a pasted link; loaded while the dialog opens, they show in the render that
+// reveals them, so the footer does not move under a press that is already on its way to Add.
+const xhttpOptions = preloadable<ComponentProps<typeof XhttpOptionsType>>(() => import('./XhttpOptions').then(module => ({default: module.XhttpOptions})));
+const XhttpOptions = xhttpOptions.Component;
+const ManualFields = lazy(() => import('./ManualFields').then(module => ({default: module.ManualFields})));
 const SubscriptionFields = lazy(() => import('./SubscriptionFields').then(module => ({default: module.SubscriptionFields})));
 const dialogForm = 'nodes-dialog-form';
 export function Nodes(props: PageProps) {
@@ -50,6 +58,15 @@ export function Nodes(props: PageProps) {
     setForm,
     removeNodes,
     setNodeLink,
+    addMode,
+    setAddMode,
+    draft,
+    nodeValue,
+    setDraftField,
+    newName,
+    joinChoices,
+    joinPicked,
+    setJoinPicked,
     xhttp,
     headerDuplicates,
     setXhttp,
@@ -75,6 +92,10 @@ export function Nodes(props: PageProps) {
     updateGroups,
     setUpdateGroups
   } = useNodesPage(props);
+  const editsLink = dialog?.kind === 'node' || dialog?.kind === 'editNode';
+  useEffect(() => {
+    if (editsLink) void xhttpOptions.preload().catch(() => undefined);
+  }, [editsLink]);
   const intro = (
     <HelpRow help={{title: t('nav.nodes'), text: t('nodes.sourceHelp')}}>
       <span className="rp-note">{t('nodes.note')}</span>
@@ -123,6 +144,60 @@ export function Nodes(props: PageProps) {
       </Link>
     </span>
   );
+  // The pasted-link fields: also what the edit dialog shows, with the node's name above the link.
+  const linkTab = dialog && (dialog.kind === 'node' || dialog.kind === 'editNode') && (
+    <>
+      <span className="rp-label">{t(dialog.kind === 'editNode' ? 'nodes.editNodeHelp' : 'nodes.addNodeHelp')}</span>
+      {!batch && dialog.kind === 'editNode' && (
+        <TextField
+          error={nodeNameError ?? undefined}
+          isDisabled={pending}
+          label={t('ui.name')}
+          value={form.name}
+          placeholder="hk-03"
+          onChange={name => setForm({...form, name})}
+        />
+      )}
+      <NodeLinkField
+        error={nodeLinkError ?? (dialog.kind === 'node' ? nodeNameError : null) ?? undefined}
+        isDisabled={pending}
+        label={t('nodes.link')}
+        description={dialog.kind === 'node' && !batch && newName ? t('nodes.willAddAs', {name: newName}) : undefined}
+        value={form.value}
+        placeholder="vless://…"
+        onChange={setNodeLink}
+      />
+      {batch && (
+        <>
+          <span className="rp-label">{t('nodes.batchExcluded', {n: batch.rows.filter(row => row.error).length})}</span>
+          <DataTable
+            label={t('nodes.batchPreview')}
+            rows={batch.rows}
+            cols={[
+              {id: 'name', label: t('ui.name'), minWidth: 120, isRowHeader: true, text: 'wrap', render: row => row.name},
+              {id: 'scheme', label: t('ui.protocol'), minWidth: 80, render: row => row.scheme},
+              {
+                id: 'error',
+                label: t('ui.error'),
+                minWidth: 120,
+                render: row => row.error && <TextTooltip text={row.error}>{row.errorSummary}</TextTooltip>
+              }
+            ]}
+          />
+        </>
+      )}
+      {batchErrors.map((error, index) => (
+        <p key={index} className="rp-field-error">
+          {error}
+        </p>
+      ))}
+      {xhttp && (
+        <Suspense fallback={null}>
+          <XhttpOptions fields={xhttp} duplicates={headerDuplicates} isDisabled={pending} onChange={setXhttp} />
+        </Suspense>
+      )}
+    </>
+  );
   return (
     <div className="rp-page">
       {tabs.length > 0 ? (
@@ -149,7 +224,11 @@ export function Nodes(props: PageProps) {
           </>
         )}
       >
-        {problem && <ProblemAlert key={problem.id} problem={problem} />}
+        {problem && (
+          <ProblemAlert key={problem.id} problem={problem}>
+            <BackendText texts={problem.backend} />
+          </ProblemAlert>
+        )}
         {(dialog?.kind === 'provider' || dialog?.kind === 'editProvider') && (
           <Form id={dialogForm} className="rp-list" onSubmit={send}>
             <span className="rp-label">{t(dialog.kind === 'provider' ? 'nodes.addProviderHelp' : 'nodes.editProviderHelp')}</span>
@@ -187,53 +266,46 @@ export function Nodes(props: PageProps) {
         )}
         {(dialog?.kind === 'node' || dialog?.kind === 'editNode') && (
           <Form id={dialogForm} className="rp-list" onSubmit={send}>
-            <span className="rp-label">{t(dialog.kind === 'editNode' ? 'nodes.editNodeHelp' : 'nodes.addNodeHelp')}</span>
-            {!batch && (
-              <TextField
-                error={nodeNameError ?? undefined}
-                isDisabled={pending}
-                label={t('ui.name')}
-                value={form.name}
-                placeholder="hk-03"
-                onChange={name => setForm({...form, name})}
+            {dialog.kind === 'editNode' ? (
+              linkTab
+            ) : (
+              <Tabs
+                label={t('nodes.addNode')}
+                value={addMode}
+                onChange={id => setAddMode(id === 'manual' ? 'manual' : 'link')}
+                items={[
+                  {id: 'link', label: t('nodes.manual.link'), content: <div className="rp-list">{linkTab}</div>},
+                  {
+                    id: 'manual',
+                    label: t('nodes.manual.fields'),
+                    content: (
+                      <div className="rp-list">
+                        <Suspense fallback={null}>
+                          <ManualFields
+                            draft={draft}
+                            link={nodeValue}
+                            nameError={nodeNameError ?? undefined}
+                            linkError={nodeLinkError ?? undefined}
+                            isDisabled={pending}
+                            onChange={setDraftField}
+                          />
+                        </Suspense>
+                      </div>
+                    )
+                  }
+                ]}
               />
             )}
-            <NodeLinkField
-              error={nodeLinkError ?? undefined}
-              isDisabled={pending}
-              label={t('nodes.link')}
-              value={form.value}
-              placeholder="vless://…"
-              onChange={setNodeLink}
-            />
-            {batch && (
-              <>
-                <span className="rp-label">{t('nodes.batchExcluded', {n: batch.rows.filter(row => row.error).length})}</span>
-                <DataTable
-                  label={t('nodes.batchPreview')}
-                  rows={batch.rows}
-                  cols={[
-                    {id: 'name', label: t('ui.name'), minWidth: 120, isRowHeader: true, text: 'wrap', render: row => row.name},
-                    {id: 'scheme', label: t('ui.protocol'), minWidth: 80, render: row => row.scheme},
-                    {
-                      id: 'error',
-                      label: t('ui.error'),
-                      minWidth: 120,
-                      render: row => row.error && <TextTooltip text={row.error}>{row.errorSummary}</TextTooltip>
-                    }
-                  ]}
-                />
-              </>
-            )}
-            {batchErrors.map((error, index) => (
-              <p key={index} className="rp-field-error">
-                {error}
-              </p>
-            ))}
-            {xhttp && (
-              <Suspense fallback={null}>
-                <XhttpOptions fields={xhttp} duplicates={headerDuplicates} isDisabled={pending} onChange={setXhttp} />
-              </Suspense>
+            {dialog.kind === 'node' && joinChoices.length > 0 && (
+              <SearchMultiSelect
+                label={t('nodes.addToGroup')}
+                searchLabel={t('group.searchGroups')}
+                summary={joinPicked.length ? t('group.selected', {n: joinPicked.length}) : t('ui.none')}
+                items={joinChoices}
+                value={joinPicked}
+                onChange={setJoinPicked}
+                isDisabled={pending}
+              />
             )}
           </Form>
         )}

@@ -23,7 +23,19 @@ import {backendCode, backendMessage, oneLine} from '../../i18n/backend';
 import {latencyTone} from '../../ui/ui';
 import {isBareName, isQuotable} from '../../dae/text';
 import {nodeReferenced, readNodeEntries, type NodeEntry} from '../../dae/nodes';
-import {citingGroups, groupsNamingTag, namedInExpression, type GroupEntry} from '../../dae/groups';
+import {
+  addNodesToGroup,
+  citingGroups,
+  describeFilters,
+  exactTokens,
+  groupsNamingTag,
+  isWritableName,
+  namedInExpression,
+  noNodes,
+  readGroupEntries,
+  writeGroupEntry,
+  type GroupEntry
+} from '../../dae/groups';
 import {groupOwners} from '../shared/groupText';
 import {subscriptionNames, verifiedTags} from '../shared/subscriptionNames';
 import {draftInterval, intervalText} from './subscription';
@@ -341,12 +353,39 @@ export function nodeFormReason(kind: string | undefined, name: string, value: st
 
 // Joining opens the group's editor in the source that declares it, so only a group that editor can write is offered:
 // declared once, in a writable source whose content is known complete and that no write is changing.
-export function joinableGroups(
+export function joinableOwners(
   sources: ConfigSource[],
   isComplete: (source: ConfigSource) => boolean | undefined,
   isBusy: (source: ConfigSource) => boolean
-): GroupEntry[] {
+): {entry: GroupEntry; origin: ConfigSource}[] {
   return [...groupOwners(sources).values()].flatMap(owner =>
-    owner !== 'ambiguous' && owner.origin.writable && isComplete(owner.origin) === true && !isBusy(owner.origin) ? [owner.entry] : []
+    owner !== 'ambiguous' && owner.origin.writable && isComplete(owner.origin) === true && !isBusy(owner.origin) ? [owner] : []
   );
+}
+export const joinableGroups = (...args: Parameters<typeof joinableOwners>): GroupEntry[] => joinableOwners(...args).map(owner => owner.entry);
+
+// A group without a filter line, or with one that takes every node, holds a new node already; a name filter would narrow it.
+export const holdsEveryNode = (entry: Pick<GroupEntry, 'filters'>) => !entry.filters.some(filter => filter.trim()) || describeFilters(entry.filters).everyNode;
+
+// A custom group lists its nodes by exact name, or holds the empty placeholder; any other filter (subscription, region,
+// keyword, regex, nested group) selects by a rule that a node name does not belong in.
+export const customGroup = (entry: Pick<GroupEntry, 'filters'>) =>
+  entry.filters.some(filter => filter.trim()) && entry.filters.every(filter => filter.trim() === noNodes || exactTokens(filter.trim(), 'name') !== null);
+
+// The source text with `names` added to each group's node list, or null when a group is gone or a name cannot be written.
+export function joinNodesToGroups(text: string, groups: string[], names: string[]): string | null {
+  if (!names.every(isWritableName)) return null;
+  let out = text;
+  for (const group of groups) {
+    const entry = readGroupEntries(out)
+      .filter(item => item.name === group)
+      .at(-1);
+    if (!entry) return null;
+    if (holdsEveryNode(entry)) continue;
+    // The placeholder says the group is empty; it goes once the group names a node.
+    if (entry.filters.some(filter => filter.trim() === noNodes))
+      out = writeGroupEntry(out, group, {filters: entry.filters.filter(filter => filter.trim() !== noNodes), policy: entry.policy});
+    out = addNodesToGroup(out, group, names);
+  }
+  return out;
 }

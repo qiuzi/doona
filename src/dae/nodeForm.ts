@@ -1,5 +1,8 @@
 export const protocols = ['vmess', 'vless', 'hysteria2', 'ss', 'trojan', 'tuic', 'anytls', 'socks5', 'juicity'] as const;
 export type Protocol = (typeof protocols)[number];
+export const isProtocol = (value: string): value is Protocol => (protocols as readonly string[]).includes(value);
+const protocolNames: Partial<Record<Protocol, string>> = {ss: 'Shadowsocks', hysteria2: 'Hysteria2', anytls: 'AnyTLS', juicity: 'Juicity'};
+export const protocolName = (protocol: Protocol) => protocolNames[protocol] ?? protocol.toUpperCase();
 export type NodeFields = Record<string, string> & {protocol: Protocol; host: string; port: string; username: string; password: string; name: string};
 export type NodeDocument = {original: string; initial: NodeFields; query: string; json?: Record<string, unknown>; tail: string};
 const decode64 = (value: string) =>
@@ -165,9 +168,12 @@ export function parseNodeLink(original: string): {document: NodeDocument; fields
     }
     if (!fields.name) fields.name = params.get('remark') ?? '';
     if (protocol === 'vmess') {
-      fields.method = fields.username;
-      fields.username = fields.password;
-      fields.password = '';
+      // `cipher:uuid@host:port`, or the bare `uuid@host:port` honk reads for any cipher but auto.
+      if (fields.password) {
+        fields.method = fields.username;
+        fields.username = fields.password;
+        fields.password = '';
+      }
       fields.method =
         params.get('scy') ??
         params.get('encryption') ??
@@ -215,6 +221,8 @@ export function nodeLink(fields: NodeFields, document?: NodeDocument): string {
     if (params.has('security') && !['none', 'tls'].includes(params.get('security')!)) params.delete('security');
     params.set('scy', fields.method);
   }
+  // A VMess link names `security` only for TLS; none is the default.
+  if (fields.protocol === 'vmess' && params.get('security') === 'none') params.delete('security');
   if (fields.mport && (!same || fields.mport !== document?.initial.mport || /[:,]/.test(document?.original.split('?')[0] ?? '')))
     params.set('mport', fields.mport);
   const enc = encodeURIComponent;
@@ -226,6 +234,180 @@ export function nodeLink(fields: NodeFields, document?: NodeDocument): string {
         : `${enc(fields.username)}${fields.password ? `:${enc(fields.password)}` : ''}`;
   const host = fields.host.includes(':') ? `[${fields.host.replace(/^\[|\]$/g, '')}]` : fields.host;
   const authority =
-    fields.protocol === 'vmess' ? encode64(`${fields.method}:${fields.username}@${host}:${fields.port}`) : `${auth ? `${auth}@` : ''}${host}:${fields.port}`;
+    fields.protocol === 'vmess'
+      ? encode64(`${fields.method === 'auto' ? 'auto:' : ''}${fields.username}@${host}:${fields.port}`)
+      : `${auth ? `${auth}@` : ''}${host}:${fields.port}`;
   return `${fields.protocol}://${authority}${params.size ? `?${params}` : ''}${fields.name ? `#${enc(fields.name)}` : ''}${same ? (document?.tail ?? '') : ''}`;
+}
+// `flag` is the value a ticked checkbox writes; `range` bounds a whole number.
+export type ManualField = {key: string; options?: string[]; flag?: string; required?: boolean; range?: [number, number]};
+const uuidProtocols = ['vmess', 'vless', 'tuic', 'juicity'];
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const shadowsocksMethods = [
+  'aes-128-gcm',
+  'aes-256-gcm',
+  'chacha20-ietf-poly1305',
+  '2022-blake3-aes-128-gcm',
+  '2022-blake3-aes-256-gcm',
+  '2022-blake3-chacha20-poly1305'
+];
+export const vmessMethods = ['auto', 'aes-128-gcm'];
+export const congestionControls = ['cubic', 'bbr', 'new_reno'];
+export const obfsTypes = ['', 'salamander'];
+export const transports = ['tcp', 'ws', 'grpc', 'xhttp'];
+export const ssPlugins = ['', 'v2ray-plugin', 'obfs-local'];
+const packetEncodings = ['auto', 'none', 'xudp', 'uot-v2'];
+const muxModes = ['off', 'h2mux', 'xray'];
+const udp443Policies = ['reject', 'skip', 'allow'];
+export const xhttpModes = ['auto', 'packet-up', 'stream-up', 'stream-one'];
+// The security choices of a protocol, or undefined where it has none.
+export const securityOptions = (protocol: Protocol) =>
+  protocol === 'trojan' ? ['tls', 'reality'] : protocol === 'vless' ? ['none', 'tls', 'reality'] : protocol === 'vmess' ? ['none', 'tls'] : undefined;
+// Whether the node carries a TLS handshake, so the form asks for its SNI.
+export const usesTls = (f: NodeFields) =>
+  !['ss', 'socks5'].includes(f.protocol) && (f.security !== 'none' || ['tuic', 'juicity', 'hysteria2', 'anytls'].includes(f.protocol));
+// XTLS flow rides only on VLESS over TCP with TLS or REALITY.
+const flowOffered = (f: NodeFields) => f.protocol === 'vless' && f.type === 'tcp' && f.security !== 'none';
+// The fields the form shows after the server address and port, for the node as filled in so far: which credentials,
+// cipher, security, TLS, transport and protocol options apply to this protocol and choice. Lite's form reads the same lists.
+export function manualFields(f: NodeFields): ManualField[] {
+  const p = f.protocol;
+  const fields: ManualField[] = [];
+  const add = (key: string, more: Omit<ManualField, 'key'> = {}) => fields.push({key, ...more});
+  if (['vmess', 'vless', 'tuic', 'juicity', 'socks5'].includes(p)) add('username', {required: p !== 'socks5'});
+  if (!['vmess', 'vless'].includes(p)) add('password', {required: p !== 'socks5'});
+  if (p === 'ss') add('method', {options: shadowsocksMethods});
+  if (p === 'vmess') add('method', {options: vmessMethods});
+  const security = securityOptions(p);
+  if (security) add('security', {options: security});
+  if (p === 'ss') add('plugin', {options: ssPlugins});
+  if (flowOffered(f)) add('flow', {options: ['', 'xtls-rprx-vision']});
+  if (usesTls(f)) {
+    add('sni');
+    add('insecure', {flag: '1'});
+  }
+  if (f.security === 'reality') {
+    add('pbk', {required: true});
+    add('sid');
+    add('spx');
+  }
+  if (['vmess', 'vless', 'trojan'].includes(p)) {
+    add('type', {options: transports});
+    if (f.type === 'ws' || f.type === 'xhttp') {
+      add('transportHost');
+      add('path');
+    }
+    if (f.type === 'grpc') add('serviceName');
+    if (f.type === 'xhttp') add('mode', {options: xhttpModes});
+  }
+  if (p === 'hysteria2') {
+    add('obfs', {options: obfsTypes});
+    if (f.obfs) add('obfs-password');
+  }
+  if (p === 'tuic') add('congestion_control', {options: congestionControls});
+  return fields;
+}
+// The options honk reads beyond manualFields, for the node as filled in so far. Each applies only where honk's share-link parser
+// reads it: ALPN for TUIC and XHTTP, the QUIC and AnyTLS tuning for their own protocols, and the mux controls for VLESS.
+export function advancedFields(f: NodeFields): ManualField[] {
+  const p = f.protocol;
+  const fields: ManualField[] = [];
+  const add = (key: string, more: Omit<ManualField, 'key'> = {}) => fields.push({key, ...more});
+  const count = (key: string, range: [number, number] = [0, Number.MAX_SAFE_INTEGER], required = false) => add(key, {range, required});
+  const vision = flowOffered(f) && !!f.flow;
+  if (p === 'tuic' || (f.type === 'xhttp' && usesTls(f))) add('alpn');
+  if (usesTls(f)) {
+    add('pinSHA256');
+    add('ech_config');
+  }
+  if (p === 'ss' && f.plugin) add('plugin-opts');
+  if (p === 'vless') {
+    add('packetEncoding', {options: vision ? ['auto', 'xudp'] : packetEncodings});
+    // Vision needs a direct TCP path and no mux, nor UDP over a native or uot-v2 stream. Behind XHTTP, Xray mux may carry UDP only.
+    if (!vision) add('mux', {options: muxModes});
+    if (!vision && f.mux === 'h2mux') add('padding', {flag: 'true'});
+    if (!vision && f.mux === 'xray') {
+      if (f.type === 'xhttp') count('concurrency', [-32768, -1], true);
+      else count('concurrency', [-32768, 32767]);
+      count('xudpConcurrency', [-32768, 32767]);
+      add('xudpProxyUDP443', {options: udp443Policies});
+    }
+  }
+  if (p === 'hysteria2') {
+    count('upmbps', [0, 2 ** 32 - 1]);
+    count('downmbps', [0, 2 ** 32 - 1]);
+    add('mport');
+    count('mhop');
+  }
+  if (['hysteria2', 'tuic', 'juicity'].includes(p)) count('mtu', [1200, 65527]);
+  if (['hysteria2', 'tuic'].includes(p)) {
+    count('initStreamReceiveWindow');
+    count('initConnReceiveWindow');
+  }
+  if (p === 'hysteria2') add('disablePathMTUDiscovery', {flag: '1'});
+  if (p === 'anytls') {
+    count('min_idle_session', [0, 65535]);
+    count('idle_session_check_interval');
+    count('idle_session_timeout');
+  }
+  return fields;
+}
+// The node with the choices the form no longer offers dropped, such as the flow once the transport leaves TCP.
+export function settle(f: NodeFields): NodeFields {
+  const next = {...f};
+  if (!flowOffered(f)) next.flow = '';
+  if (next.flow) {
+    for (const key of ['mux', 'padding', 'concurrency', 'xudpConcurrency', 'xudpProxyUDP443']) next[key] = '';
+    if (!['', 'auto', 'xudp'].includes(next.packetEncoding)) next.packetEncoding = '';
+  }
+  return next;
+}
+// Whether the hop ports are nonzero ranges that do not repeat, as honk requires.
+function hopsValid(spec: string) {
+  const seen = new Set<number>();
+  return spec
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .every(part => {
+      const range = part.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+      const [low, high] = [Number(range?.[1]), Number(range?.[2] ?? range?.[1])];
+      if (!range || low < 1 || high < low || high > 65535) return false;
+      for (let port = low; port <= high; port++) {
+        if (seen.has(port)) return false;
+        seen.add(port);
+      }
+      return true;
+    });
+}
+// Whether honk reads a filled advanced value as given: a whole number in range, hop ports that do not repeat, H2 alone for XHTTP.
+function advancedInvalid(f: NodeFields, {key, range}: ManualField) {
+  const value = (f[key] ?? '').trim();
+  if (!value) return false;
+  if (range) return !/^-?\d+[a-z]*$/i.test(value) || Number.parseInt(value, 10) < range[0] || Number.parseInt(value, 10) > range[1];
+  if (key === 'alpn') return f.type === 'xhttp' && value.split(',').some(item => item.trim() && item.trim() !== 'h2');
+  return key === 'mport' && !hopsValid(value);
+}
+// The keys of the server address, port and shown fields that are missing or malformed; the name is the caller's.
+export function manualInvalid(f: NodeFields): string[] {
+  const port = Number(f.port);
+  return [
+    ...(/^[^\s/?#@\\]+$/.test(f.host) ? [] : ['host']),
+    ...(Number.isInteger(port) && port >= 1 && port <= 65535 ? [] : ['port']),
+    ...[...manualFields(f), ...advancedFields(f)]
+      .filter(
+        field =>
+          (field.required && !f[field.key]) ||
+          (field.key === 'username' && uuidProtocols.includes(f.protocol) && f.username && !uuidPattern.test(f.username)) ||
+          advancedInvalid(f, field)
+      )
+      .map(field => field.key)
+  ];
+}
+// The link of the fields manualFields shows, or '' while one is invalid; a field the form hides now is left out however it was filled.
+export function manualLink(f: NodeFields): string {
+  if (manualInvalid(f).length) return '';
+  const fields: NodeFields = {...emptyNode(f.protocol), name: f.name, host: f.host, port: f.port};
+  for (const {key} of [...manualFields(f), ...advancedFields(f)]) fields[key] = f[key];
+  return nodeLink(fields);
 }
