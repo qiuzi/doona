@@ -6,7 +6,7 @@
 
 **[daeuniverse](https://github.com/daeuniverse) 引擎的靜態 Web 介面：在瀏覽器中管理節點、群組、規則與組態。**
 
-**[線上示範](https://demo.daeuniverse.org/)** / **[Lite 示範（預覽版）](https://demo.daeuniverse.org/lite/)** / **[文件](https://doona.daeuniverse.org/zh-TW/)**
+**[線上示範](https://demo.daeuniverse.org/)** / **[Lite 示範（預覽版）](https://demo.daeuniverse.org/lite/)** / **[文件](https://daeuniverse.org/zh-TW/doona/)**
 
 繁體中文 / [简体中文](README.zh-CN.md) / [English](README.en.md)
 
@@ -16,7 +16,7 @@
 
 doona 是用於監控代理流量、管理節點、群組、規則與組態的靜態 Web 介面。使用時需要正在運作且已啟用原生 API 的 [honk](https://github.com/daeuniverse/honk) 後端；目前不支援 dae。
 
-![顯示流量圖表與狀態卡片的活動頁](https://doona.daeuniverse.org/screenshots/zh-TW/activity-light.webp)
+![顯示流量圖表與狀態卡片的活動頁](https://daeuniverse.org/doona/screenshots/zh-TW/activity-light.webp)
 
 ## 功能
 
@@ -26,11 +26,11 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 - 檢視連線、分流記錄與 DNS 查詢。
 - 檢視後端日誌與事件。
 
-![活動頁卡片的寬度與高度設定](https://doona.daeuniverse.org/screenshots/zh-TW/dashboard-settings.webp)
+![活動頁卡片的寬度與高度設定](https://daeuniverse.org/doona/screenshots/zh-TW/dashboard-settings.webp)
 
 在活動頁調整卡片尺寸。
 
-![分流頁地圖顯示經過所選規則或節點的流量路徑](https://doona.daeuniverse.org/screenshots/zh-TW/routing.webp)
+![分流頁地圖顯示經過所選規則或節點的流量路徑](https://daeuniverse.org/doona/screenshots/zh-TW/routing.webp)
 
 分流頁地圖；選取規則或節點可檢視經過它的流量路徑。
 
@@ -40,7 +40,7 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 - 測試篩選後的節點，並依延遲排序。
 - 更新訂閱並檢視探測結果。
 
-![節點操作選單與探測結果](https://doona.daeuniverse.org/screenshots/zh-TW/node-actions.webp)
+![節點操作選單與探測結果](https://daeuniverse.org/doona/screenshots/zh-TW/node-actions.webp)
 
 檢視節點的探測結果，並將節點加入群組。
 
@@ -50,11 +50,11 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 - 編輯規則清單並套用路由範本。
 - 填寫行程名稱與防火牆標記，追蹤路由決策。
 
-![策略群組編輯器](https://doona.daeuniverse.org/screenshots/zh-TW/group-editor.webp)
+![策略群組編輯器](https://daeuniverse.org/doona/screenshots/zh-TW/group-editor.webp)
 
 編輯群組的篩選條件與策略。
 
-![進階檢視中的規則清單](https://doona.daeuniverse.org/screenshots/zh-TW/rules-advanced.webp)
+![進階檢視中的規則清單](https://daeuniverse.org/doona/screenshots/zh-TW/rules-advanced.webp)
 
 在進階檢視中檢視規則清單。
 
@@ -64,7 +64,7 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 - 透過表單修改全域設定。
 - 檢視修訂並匯出組態。
 
-![顯示驗證錯誤的設定檔編輯器](https://doona.daeuniverse.org/screenshots/zh-TW/config-diagnostics.webp)
+![顯示驗證錯誤的設定檔編輯器](https://daeuniverse.org/doona/screenshots/zh-TW/config-diagnostics.webp)
 
 在設定檔編輯器中定位驗證錯誤。
 
@@ -74,15 +74,15 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 - 使用英語、簡體中文或繁體中文。
 - 在手機上使用頁面分頁、清單與選單。
 
-![可用配色比較圖](https://doona.daeuniverse.org/screenshots/palettes.webp)
+![可用配色比較圖](https://daeuniverse.org/doona/screenshots/palettes.webp)
 
 比較可用的配色。
 
-![手機上的連線清單與外觀選單](https://doona.daeuniverse.org/screenshots/zh-TW/phone.webp)
+![手機上的連線清單與外觀選單](https://daeuniverse.org/doona/screenshots/zh-TW/phone.webp)
 
 在手機上瀏覽連線並調整外觀。
 
-可用功能取決於後端的能力與組態，詳見[功能要求](https://doona.daeuniverse.org/zh-TW/feature-requirements.html)。
+可用功能取決於後端的能力與組態，詳見[功能要求](https://daeuniverse.org/zh-TW/doona/feature-requirements)。
 
 ## 兩個版本
 
@@ -96,9 +96,9 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 | 用途       | 用於日常管理的完整介面             | 體積更小的設定檔編輯器   |
 | 狀態       | 候選版本                           | 仍在測試的預覽版         |
 
-功能、後端要求及版本切換方式見[版本比較](https://doona.daeuniverse.org/zh-TW/editions.html)。
+功能、後端要求及版本切換方式見[版本比較](https://daeuniverse.org/zh-TW/doona/editions)。
 
-![doona lite 節點頁面](https://doona.daeuniverse.org/images/lite-nodes-light.webp)
+![doona lite 節點頁面](https://daeuniverse.org/doona/images/lite-nodes-light.webp)
 
 ## 體驗示範版
 
@@ -112,7 +112,7 @@ doona 是用於監控代理流量、管理節點、群組、規則與組態的�
 
 ## 安裝
 
-honk 的完整發布版本已內嵌 doona。依照[快速入門](https://doona.daeuniverse.org/zh-TW/quick-start.html)即可使用；文件也說明如何單獨安裝 doona。
+honk 的完整發布版本已內嵌 doona。依照[快速入門](https://daeuniverse.org/zh-TW/doona/quick-start)即可使用；文件也說明如何單獨安裝 doona。Debian、Ubuntu、Fedora 與 openSUSE 可從 daeuniverse 套件來源安裝：Debian 與 Ubuntu 用 `doona-web`，Fedora 與 openSUSE 用 `doona`，套件來源的設定見 [Debian](https://daeuniverse.org/zh-TW/guide/packages/debian)、[Fedora](https://daeuniverse.org/zh-TW/guide/packages/fedora) 與 [openSUSE](https://daeuniverse.org/zh-TW/guide/packages/opensuse)。發布封存檔與套件仍可從 GitHub Releases 取得。
 
 ## 後端協定
 
@@ -132,13 +132,13 @@ honk 負責代理流量；支援的協定、傳輸方式與限制見 [honk 節�
 - [字型](docs/fonts.md)
 - [國旗](docs/country-flags.md)
 - [更新記錄](CHANGELOG.md)
-- [文件站](https://doona.daeuniverse.org/zh-TW/)
+- [文件站](https://daeuniverse.org/zh-TW/doona/)
 
 ## 開發
 
-建置、測試與打包指令、原始碼配置與契約的固定提交，見[開發](https://doona.daeuniverse.org/zh-TW/development.html)一頁；送出 pull request 前先讀 [CONTRIBUTING.md](CONTRIBUTING.md)。
+建置、測試與打包指令、原始碼配置與契約的固定提交，見[開發](https://daeuniverse.org/zh-TW/doona/development)一頁；送出 pull request 前先讀 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-lite 的獨立相依套件安裝與建置指令見[開發](https://doona.daeuniverse.org/zh-TW/development.html#建置-doona-lite)一頁。
+lite 的獨立相依套件安裝與建置指令見[開發](https://daeuniverse.org/zh-TW/doona/development#doona-lite)一頁。
 
 ## 支援
 
