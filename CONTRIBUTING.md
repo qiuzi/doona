@@ -176,7 +176,9 @@ Some lists have one home, and everything else reads them:
 | Visible text comes from catalogues                                                    | `check:i18n`                                                                           |
 | Size budgets                                                                          | `check:size`                                                                           |
 
-`check:size` budgets what a reader downloads, in gzip bytes from the Vite manifest, not the total: the login and Activity startup paths (entry chunk and its static imports, the largest language catalogue, the charts Activity loads), startup CSS, one catalogue, one font stylesheet, each page beyond Activity, the config editor and the mock. The budgets live in `sizeBudget` in `package.json`; a failure names the budget, the measured size, the limit and the largest files. The total is printed for information and does not fail the build. A startup budget that rises needs its reason in the pull request.
+`check:size` budgets what a reader downloads, in gzip bytes from the Vite manifest, not the total: the login and Activity startup paths (entry chunk and its static imports, the largest language catalogue, the charts Activity loads), startup CSS, one catalogue, one font stylesheet, each page beyond Activity, the config editor and the mock. The limits live in `sizeBudget` in `package.json`; a failure names the budget, the measured size, the limit and the largest files. The total is printed for information and does not fail the build.
+
+The limits are fixed ceilings with headroom, not the last measurement, so a feature does not edit them. Each pull request gets a size report instead: a comment, updated on every push, that compares each budget with `main` at the pull request's base and lists the largest parts of any budget that grew; the Check run's summary shows the same table. A change that passes a limit is a signal to slim it down first. Raising a limit is a separate decision, in its own commit, with the reason in the pull request.
 
 A reviewer checks the rest by hand: watched and cached reads go through the store, `view.ts` stays pure and tested, components only render, and no engine-specific setting or section name lands outside `src/api/engines`, even as data.
 
@@ -275,7 +277,7 @@ Revisit this if S2 stops requiring the macro or the size budgets stop applying.
 ### Add a palette
 
 1. Add an entry to `src/shell/palettes.ts`. The id is `family/flavour`; a family with one flavour repeats its name, as in `nord/nord`.
-2. Add `src/ui/styles/palettes/<family>.css` and import it from `src/ui/styles/palettes.css`, or load it on demand as Glass and Halloween do (`src/shell/paletteSheet.ts`) to keep it out of the startup bundle. It holds a light block keyed on `:root[data-family='<family>']`, a dark block that adds `[data-scheme='dark']`, and a `[data-flavour]` block for each extra flavour. Each block sets every token in the table below, and `tools/palettes.test.mjs` checks that. Images a palette needs go in `src/ui/styles/palettes/<family>/`, referenced relatively from its stylesheet, with licence entries in `NOTICE` and `REUSE.toml`.
+2. Add `src/ui/styles/palettes/<family>.css` and register it in the `sheets` map of `src/shell/paletteSheets.ts` and in the `families` map of `src/shell/useAppearance.ts`, which load it on demand and keeps it out of the startup bundle; only the default family, rose-pine, is imported from `src/ui/styles/palettes.css`. Glass and Halloween have loaders of their own. It holds a light block keyed on `:root[data-family='<family>']`, a dark block that adds `[data-scheme='dark']`, and a `[data-flavour]` block for each extra flavour. Each block sets every token in the table below, and `tools/palettes.test.mjs` checks that. Images a palette needs go in `src/ui/styles/palettes/<family>/`, referenced relatively from its stylesheet, with licence entries in `NOTICE` and `REUSE.toml`.
 3. Add its names under the `palette.*` keys in `en.json` and in every complete language's catalogue (see Translations). A palette may also reword a few statuses: its optional `words` map points a catalogue key at a `palette.*` key of its own, and every `useT` translator reads that key while the palette is on. Components need no palette check.
 4. Add it to the map in `e2e/contrast.spec.ts` and run that spec.
 
@@ -329,7 +331,7 @@ Publish in two phases so honk embeds the same doona version:
 1. Let the tagged release workflow build the standalone UI, fonts, precompressed assets and packages. Review and publish its draft before building honk. The workflow does not bundle honk.
 2. Update honk's `.github/ci/pins.env` with `DOONA_VERSION` (without `v`), `DOONA_REVISION` (the peeled doona tag commit), and `DOONA_SHA256` and `DOONA_LITE_SHA256` (the API digests of the program and lite archives). honk's release then embeds this doona version and attaches `doona-source-<version>.tar.gz`. Link that honk release from the doona release notes under Pairing with honk; the doona release carries no honk builds.
 
-For tag `v0.1.0-rc.4`, release assets keep the upstream version without `v`. See the
+For tag `v0.1.0-rc.5`, release assets keep the upstream version without `v`. See the
 [package version table](install/README.md#version-spellings) for every archive, binary package and source recipe.
 
 #### Release body
