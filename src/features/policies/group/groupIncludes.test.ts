@@ -1,11 +1,11 @@
 import {describe, expect, it} from 'vitest';
-import type {Provider} from '../../../api/model';
+import type {Node, Provider} from '../../../api/model';
 import {nodeFixtures} from '../../../../mock/fixtures';
 import {groupFilterDraft, groupFilterTexts, newGroupFilter} from '../../../dae/groupConditions';
 import {readGroupEntries, writeGroupEntry} from '../../../dae/groups';
 import {compileFilters} from '../../../dae/groupFilters';
 import {flagChoices, regionFlag} from '../../../dae/flags';
-import {regions} from '../../../dae/regions';
+import {allRegions, regions} from '../../../dae/regions';
 import {flagForName} from '../../shared/countryFlags';
 import {regionGroups} from '../../../dae/templates';
 import {
@@ -28,15 +28,23 @@ const hk = regionFilters.find(region => region.id === 'HK')!.filter;
 const cn = regionFilters.find(region => region.id === 'CN')!.filter;
 describe('visual group includes', () => {
   it('uses the flag picker region vocabulary and locale names', () => {
+    const everyFlag = allRegions.map(([id]) => ({name: `${regionFlag(id)} 01`}) as Node);
     for (const locale of ['en', 'zh-TW', 'zh-CN']) {
       const flags = flagChoices(locale);
-      const choices = includeChoices([], [], [], locale).region;
-      expect(choices.map(choice => choice.id)).toEqual(regions.map(([id]) => id));
-      for (const choice of choices) {
-        expect(choice.label).toBe(flags.find(flag => flag.id === choice.id)!.label);
-        expect(flagForName(choice.id + ' 01')).toBe(regionFlag(choice.id));
-      }
+      const choices = includeChoices([], everyFlag, [], locale).region;
+      expect(choices.map(choice => choice.id)).toEqual(allRegions.map(([id]) => id));
+      for (const choice of choices) expect(choice.label).toBe(flags.find(flag => flag.id === choice.id)!.label);
+      for (const [id] of regions) expect(flagForName(id + ' 01')).toBe(regionFlag(id));
     }
+  });
+  it('lists the regions with nodes and the selected ones, in list order', () => {
+    const nodes = ['🇰🇿 Almaty 01', 'JP 01', '🇦🇸 01', 'AS plan', 'no region'].map(name => ({name}) as Node);
+    const ids = (filters: string[]) => includeChoices(filters, nodes, [], 'en').region.map(region => region.id);
+    expect(ids([])).toEqual(['JP', 'KZ', 'AS']);
+    expect(includeChoices([], [], [], 'en').region).toEqual([]);
+    // A selected region with no nodes stays, so it can be unticked.
+    expect(ids(setIncludes([], 'region', ['HK']))).toEqual(['HK', 'JP', 'KZ', 'AS']);
+    expect(ids(setIncludes([], 'region', ['FR', 'PW']))).toEqual(['JP', 'FR', 'KZ', 'AS', 'PW']);
   });
   it('recognises template regions, exact lists and leaves compound filters advanced', () => {
     for (const group of regionGroups) expect(recogniseInclude(group.lines[0].slice(8))).toEqual({kind: 'region', values: [group.name.toUpperCase()]});
@@ -104,7 +112,7 @@ it("names a card's selected includes as the full choices do", () => {
   const {nodes} = nodeFixtures(120, true);
   const providers = [{id: 'p', kind: 'subscription', name: 'Harbor Co'}] as Provider[];
   const owned = nodes.map(node => ({...node, subscription_tag: 'harbor', provider_id: 'p'}));
-  for (const filters of [[], [hk], [hk, 'subtag(harbor)', 'subtag(missing)'], [regionFilters.find(region => region.id === 'JP')!.legacy!, 'name(x)']]) {
+  for (const filters of [[], [hk], [hk, 'subtag(harbor)', 'subtag(missing)'], [regionFilters.find(region => region.id === 'JP')!.legacy[0], 'name(x)']]) {
     const full = includeChoices(filters, owned, providers, 'en');
     const named = selectedIncludeLabels(filters, owned, providers, 'en');
     expect([...named.regions]).toEqual(
@@ -222,9 +230,63 @@ it('edits nested groups visually while preserving untouched tokens and legacy pi
   expect(setIncludes([], 'group', ['hk|jp', 'hk,jp', "O'Hare"])).toEqual([]);
 });
 
+// The standard region lines written before a region's flag counted as one of its aliases.
+const unflaggedHk = String.raw`name(regex: '(?i)(?:^|[^a-z0-9])hk(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])hkg(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])hongkong(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])hong kong(?:[^a-z0-9]|$)|香港|港')`;
+const unflaggedIn = String.raw`name(regex: '(?i)(?:^|[^a-z0-9])in(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])ind(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])india(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])mumbai(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])bom(?:[^a-z0-9]|$)|印度|孟買|孟买')`;
+const unflaggedCn = String.raw`name(regex: '(?i)回国|回國|中国|中國|大陆|大陸|(?:^|[^A-Za-z])(?:China|Mainland|CN)(?:[^A-Za-z]|$)') && !name(regex: '(?i)香港|澳门|澳門|台湾|台灣|臺灣|(?:^|[^A-Za-z])(?:HK|MO|TW)(?:[^A-Za-z]|$)|Hong ?Kong|Macau|Macao|Taiwan')`;
+describe('region flags', () => {
+  const named = (filter: string, name: string) => compileFilters([filter])({name} as Node);
+  it.each([
+    ['HK', '🇭🇰-家宽-倍率'],
+    ['US', '🇺🇸 LA 01'],
+    ['JP', '🇯🇵'],
+    ['IN', '🇮🇳 01'],
+    ['CN', '🇨🇳 01'],
+    ['KZ', '🇰🇿 01'],
+    ['AT', '🇦🇹'],
+    ['PK', '🇵🇰-01'],
+    ['AS', '🇦🇸 01']
+  ])('selects %s by a flag-only name', (id, name) => {
+    const filter = regionFilters.find(region => region.id === id)!.filter;
+    expect(named(filter, name)).toBe(true);
+    expect(named(filter, name.replace(/\p{Regional_Indicator}+/u, '🇽🇽'))).toBe(false);
+    expect(includeChoices([filter], [{name} as Node], [], 'en').region.find(region => region.id === id)!.count).toBe(1);
+  });
+  it('gives a region with no alias only its flag', () => {
+    const as = regionFilters.find(region => region.id === 'AS')!;
+    expect(as.filter).toBe(`name(regex: '(?i)${regionFlag('AS')}')`);
+    expect(as.legacy).toEqual([]);
+    for (const text of ['AS', 'as 01', 'Node as backup']) expect(compileFilters([as.filter])({name: text} as Node)).toBe(false);
+  });
+  it('writes the flag into every standard region filter and template group', () => {
+    for (const {id, filter} of regionFilters) if (id !== 'CN') expect(named(filter, `${regionFlag(id)} 01`), id).toBe(true);
+    for (const group of regionGroups) {
+      expect(named(group.lines[0].slice(8), `${group.flag}-01`), group.name).toBe(true);
+      expect(named(group.unflagged!, `${group.flag}-01`), group.name).toBe(false);
+    }
+  });
+  it.each([
+    ['HK', unflaggedHk],
+    ['IN', unflaggedIn],
+    ['CN', unflaggedCn],
+    ['HK', "name(regex: '港|HK|Hong Kong|HongKong')"],
+    ['US', "name(regex: '美|US|United States|America')"]
+  ])('still recognises the earlier %s line %#', (id, line) => {
+    expect(recogniseInclude(line)).toEqual({kind: 'region', values: [id]});
+    // An old line stays as written until its region is deselected.
+    expect(setIncludes([line, 'name(x)'], 'region', [id])).toEqual([line, 'name(x)']);
+    expect(setIncludes([line], 'region', [])).toEqual([noNodes]);
+  });
+  it('recognises every current and earlier template line as its region', () => {
+    for (const group of regionGroups)
+      for (const line of [group.lines[0], group.unflagged!])
+        expect(recogniseInclude(line.slice(8)), `${group.name}: ${line}`).toEqual({kind: 'region', values: [group.name.toUpperCase()]});
+  });
+});
+
 it('counts the kept legacy region and its replacement from the same explicit matches', () => {
   const nodes = nodeFixtures(0, true).nodes;
-  const legacy = regionFilters.find(region => region.id === 'HK')!.legacy!;
+  const legacy = regionFilters.find(region => region.id === 'HK')!.legacy[0];
   for (const [filters, expected] of [
     [[legacy], []],
     [[hk], ['hk-01', 'hk-02']],

@@ -2,24 +2,31 @@ import {groupFilterText, groupFilterTexts, reconcileGroupFilters, type GroupFilt
 import type {Node, Provider} from '../../../api/model';
 import {describeFilters, exactTokens, isWritableName, noNodes, quoteName} from '../../../dae/groups';
 import {compileFilters} from '../../../dae/groupFilters';
-import {regions} from '../../../dae/regions';
+import {allRegions, regionFlag} from '../../../dae/regions';
 import {flagChoices} from '../../../dae/flags';
 import {regionGroups} from '../../../dae/templates';
 import {quote, unquote} from '../../../dae/text';
 
 export type IncludeKind = 'region' | 'subscription' | 'node' | 'group';
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-export const regionFilters = regions.map(([iso, keys]) => {
-  const template = regionGroups.find(group => group.name === iso.toLowerCase());
+const regionFilter = (keys: string[]) => {
   const pattern = keys.map(key => (/^[a-z0-9 ]+$/.test(key) ? `(?:^|[^a-z0-9])${escapeRegex(key)}(?:[^a-z0-9]|$)` : escapeRegex(key))).join('|');
-  return {
-    id: iso,
-    filter: iso === 'CN' ? template!.lines[0].slice('filter: '.length) : `name(regex: ${quote('(?i)' + pattern)})`,
-    legacy: template?.lines[0].slice('filter: '.length)
-  };
+  return `name(regex: ${quote('(?i)' + pattern)})`;
+};
+const templateFilter = (line?: string) => line?.slice('filter: '.length);
+export const regionFilters = allRegions.map(([iso, keys]) => {
+  const template = regionGroups.find(group => group.name === iso.toLowerCase());
+  const filter = iso === 'CN' ? templateFilter(template!.lines[0])! : regionFilter([...keys, regionFlag(iso)]);
+  // Lines written before a region's flag counted as an alias, and the template's own lines, still read as this region.
+  const legacy = [
+    templateFilter(template?.unflagged),
+    templateFilter(template?.lines[0]),
+    ...(iso === 'CN' || !keys.length ? [] : [regionFilter(keys)])
+  ].filter((line, i, all): line is string => line !== undefined && line !== filter && all.indexOf(line) === i);
+  return {id: iso, filter, legacy};
 });
 export function recogniseInclude(filter: string): {kind: IncludeKind; values: string[]} | null {
-  const region = regionFilters.find(region => region.filter === filter.trim() || region.legacy === filter.trim());
+  const region = regionFilters.find(region => region.filter === filter.trim() || region.legacy.includes(filter.trim()));
   if (region) return {kind: 'region', values: [region.id]};
   for (const [kind, call] of [
     ['node', 'name'],
@@ -98,8 +105,7 @@ export function setIncludes(filters: string[], kind: IncludeKind, selected: stri
   if (active.length) return active;
   return filters.some(filter => filter.trim()) ? [noNodes] : next;
 }
-// Nodes matching a set of filter lines, each distinct line compiled once, and none while there are no nodes to match:
-// a closed group dialog still lists every region.
+// Nodes matching a set of filter lines, each distinct line compiled once, and none while there are no nodes to match.
 function matcher(nodes: Node[]) {
   const cache = new Map<string, Node[]>();
   return (filters: string[]) => {
@@ -152,11 +158,11 @@ export function selectedIncludeLabels(filters: string[], nodes: Node[], provider
 export function includeChoices(filters: string[], nodes: Node[], providers: Provider[], locale: string, declaredTags: string[] = []) {
   const matches = includeMatches(filters, nodes);
   const names = new Map(flagChoices(locale).map(region => [region.id, region.label]));
-  const regions = regionFilters.map(region => ({
-    id: region.id,
-    label: names.get(region.id) ?? region.id,
-    count: matches.regions.get(region.id)!.length
-  }));
+  // Only regions with nodes, and those already selected so that one with no nodes can still be unticked.
+  const selectedRegions = new Set(selectedIncludes(filters, 'region'));
+  const regions = regionFilters
+    .map(region => ({id: region.id, label: names.get(region.id) ?? region.id, count: matches.regions.get(region.id)!.length}))
+    .filter(region => region.count > 0 || selectedRegions.has(region.id));
   const subscriptionIds = new Set(providers.filter(provider => provider.kind === 'subscription').map(provider => provider.id));
   const tags = new Set([
     ...declaredTags,
