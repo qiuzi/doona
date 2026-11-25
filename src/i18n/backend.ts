@@ -80,7 +80,14 @@ const known: Record<string, Key> = {
   quic_probe_disabled: 'ui.backend.quicProbeDisabled',
   // Codes honk sets on config diagnostics.
   'legacy-config-warning': 'ui.backend.legacyConfigWarning',
-  'duplicate-subscription-entry': 'ui.backend.duplicateSubscriptionEntry'
+  'duplicate-subscription-entry': 'ui.backend.duplicateSubscriptionEntry',
+  'invalid-chain-hop-reference': 'ui.backend.invalidChainHopReference',
+  'ambiguous-chain-hop-reference': 'ui.backend.ambiguousChainHopReference',
+  'unsupported-chain-hop': 'ui.backend.unsupportedChainHop',
+  'invalid-group-exit-target': 'ui.backend.invalidGroupExitTarget',
+  'ambiguous-group-exit-target': 'ui.backend.ambiguousGroupExitTarget',
+  'unsupported-group-exit-target': 'ui.backend.unsupportedGroupExitTarget',
+  'group-exit-route-too-long': 'ui.backend.groupExitRouteTooLong'
 };
 
 const configurationRefusals = new Set(['permission_denied', 'capability_not_supported', 'temporarily_unavailable', 'invalid_request']);

@@ -2,6 +2,9 @@ import {describe, expect, it} from 'vitest';
 import type {ConfigSource, Node, Provider} from '../../api/model';
 import {readSubscriptionEntries} from '../../dae/subscriptions';
 import {
+  chainEditState,
+  chainHopChoices,
+  chainHopsView,
   nodeFormReason,
   editableSource,
   declaredInInclude,
@@ -26,7 +29,7 @@ import {
   subscriptionNameError
 } from './view';
 import {translate, type Translator} from '../../i18n';
-import {readNodeEntries} from '../../dae/nodes';
+import {readChainEntries, readNodeEntries} from '../../dae/nodes';
 import {readGroupEntries} from '../../dae/groups';
 import {createMockApi} from '../../../mock';
 import {nodeFixtures} from '../../../mock/fixtures';
@@ -533,6 +536,20 @@ describe('a failed subscription download', () => {
     expect(row.failure![0]).toContain('downloaded');
   });
 
+  it.each([
+    ['unsupported-chain-hop', [t('nodes.proxyChain.refreshRejected')]],
+    ['group-exit-route-too-long', [t('nodes.proxyChain.refreshRejected')]],
+    ['duplicate-subscription-entry', undefined],
+    [undefined, undefined]
+  ])('explains a refresh rejected for diagnostic %s', (code, failure) => {
+    const rejected = provider('a', {
+      last_error: {code: 'publication_rejected', message: 'rejected', details: {diagnostic_code: code} as unknown as Record<string, never>}
+    });
+    const row = providerRowView(rejected, undefined, 'en-US', t);
+    expect(row.failure).toEqual(failure);
+    expect(row.error).toBe(failure ? undefined : t('ui.backend.publicationRejected'));
+  });
+
   it('keeps the plain text for an engine that sends no details or no stage', () => {
     for (const details of [null, {}, {node: 'n1'}]) {
       const row = providerRowView(failed(details), undefined, 'en-US', t, names);
@@ -580,11 +597,14 @@ const main = config.sources.find(source => source.kind === 'main')!;
 const [entry] = readNodeEntries(main.content);
 const form = {name: entry.name, value: entry.link, interval: '', agent: '', cache: null, route: ''};
 
-it.each(['filter: name(hk-01)', 'default: hk-01', 'final: hk-01'])('blocks a cross-source rename through %s but allows a link edit', reference => {
-  const other = {...main, id: 'other', kind: 'include' as const, content: `group {\n other {\n ${reference}\n policy: random\n }\n}\n`};
-  expect(nodeEditState([main, other], main, entry, [], {...form, name: 'changed'}, t)).toMatchObject({valid: false, reason: t('nodes.renameElsewhere')});
-  expect(nodeEditState([main, other], main, entry, [], {...form, value: 'socks5://127.0.0.1:1080'}, t)).toMatchObject({valid: true, reason: null});
-});
+it.each(['filter: name(hk-01)', 'default: hk-01', 'final: hk-01', 'exit: hk-01'])(
+  'blocks a cross-source rename through %s but allows a link edit',
+  reference => {
+    const other = {...main, id: 'other', kind: 'include' as const, content: `group {\n other {\n ${reference}\n policy: random\n }\n}\n`};
+    expect(nodeEditState([main, other], main, entry, [], {...form, name: 'changed'}, t)).toMatchObject({valid: false, reason: t('nodes.renameElsewhere')});
+    expect(nodeEditState([main, other], main, entry, [], {...form, value: 'socks5://127.0.0.1:1080'}, t)).toMatchObject({valid: true, reason: null});
+  }
+);
 
 it.each(['hk-01', "'hk-01'"])('blocks a cross-source DNS detour rename through %s but allows a link edit', target => {
   const other = {...main, id: 'dns', kind: 'include' as const, content: `dns {\n upstream {\n remote: 'tcp://1.1.1.1:53' -> ${target}\n }\n}\n`};
@@ -593,6 +613,12 @@ it.each(['hk-01', "'hk-01'"])('blocks a cross-source DNS detour rename through %
   expect(
     nodeEditState([main, {...other, content: other.content.replace(`-> ${target}`, '-> hk-010')}], main, entry, [], {...form, name: 'changed'}, t).valid
   ).toBe(true);
+});
+
+it('takes proxy chain names and blocks a rename that a chain in another source would miss', () => {
+  const chains = {...main, id: 'chains', kind: 'include' as const, content: 'node {\n  relay: hk-01 -> hk-02\n}\n'};
+  expect(nodeEditState([main, chains], main, entry, [], {...form, name: 'relay'}, t)).toMatchObject({valid: false, nameError: t('nodes.nameTaken')});
+  expect(nodeEditState([main, chains], main, entry, [], {...form, name: 'changed'}, t)).toMatchObject({valid: false, reason: t('nodes.renameElsewhere')});
 });
 
 it('assigns duplicate names to the name field and validates links and unchanged drafts', () => {
@@ -788,4 +814,56 @@ it.each([
   ['a combined rule', ['name(a) && !name(b)'], false]
 ])('offers a group to join only if it is custom: %s', (_, filters, expected) => {
   expect(customGroup({filters})).toBe(expected);
+});
+
+describe('proxy chains', () => {
+  const {nodes} = nodeFixtures(0);
+  const [relay] = readChainEntries(main.content);
+  const original = {source: main, entry: relay};
+  const draft = {name: 'relay', hops: ['jp-01', 'hk-02']};
+  it.each([
+    ['an unchanged chain', original, draft, {valid: false, reason: null}],
+    ['a new exit', original, {...draft, hops: ['jp-01', 'sg-01']}, {valid: true, reason: null}],
+    ['a taken name', original, {...draft, name: 'hk-02'}, {valid: false, nameError: t('nodes.nameTaken')}],
+    ['an empty hop', null, {name: 'new', hops: ['hk-01', '']}, {valid: false, hopErrors: [null, null], reason: t('nodes.proxyChain.hopEmpty')}],
+    ['a later entry-only hop', null, {name: 'new', hops: ['hk-01', 'us-01']}, {valid: false, hopErrors: [null, t('ui.backend.unsupportedChainHop')]}],
+    ['a later XHTTP hop', null, {name: 'new', hops: ['us-01', 'jp-01']}, {valid: false, hopErrors: [null, t('ui.backend.unsupportedChainHop')]}],
+    ['a missing hop', original, {...draft, hops: ['gone', 'hk-02']}, {valid: false, hopErrors: [t('ui.backend.invalidChainHopReference'), null]}],
+    ['a new chain', null, {name: 'new', hops: ['us-01', 'hk-01', 'sg-01']}, {valid: true, reason: null}]
+  ])('checks %s', (_, from, next, state) => {
+    expect(chainEditState([main], from, nodes, next, t)).toMatchObject(state);
+  });
+
+  it('lists each hop with its protocol and latency, and what decides UDP', () => {
+    const twice = [...nodes, node('hk-01', {protocol: 'ss'})];
+    expect(chainHopsView(['hk-01', 'sg-01'], nodes, t)).toMatchObject({
+      hops: [
+        {label: 'hk-01', value: 'vless (TCP) (84 ms)'},
+        {label: 'sg-01', value: 'trojan (TCP) (63 ms)'}
+      ],
+      udp: t('nodes.proxyChain.udpDepends')
+    });
+    expect(chainHopsView(['us-01', 'sg-01'], nodes, t).udp).toBe('No (us-01 cannot be dialed through another hop)');
+    expect(chainHopsView(['sg-01', 'ss-01'], [...nodes, node('ss-01', {protocol: 'ss'})], t).udp).toBe('No (the exit ss-01 is not Trojan or VLESS)');
+    expect(chainHopsView(['gone', 'hk-01'], twice, t)).toMatchObject({
+      hops: [
+        {value: t('ui.backend.invalidChainHopReference'), tone: 'ms err'},
+        {value: t('ui.backend.ambiguousChainHopReference'), tone: 'ms err'}
+      ],
+      udp: '—'
+    });
+  });
+
+  it('offers every node but chains once by name, disabling shared and unquotable names', () => {
+    const choices = chainHopChoices([...nodes, node('hk-01'), node("it's"), node('direct', {protocol: 'direct'})], t);
+    expect(choices.map(choice => [choice.id, !!choice.isDisabled])).toEqual([
+      ['hk-01', true],
+      ['hk-02', false],
+      ['sg-01', false],
+      ['jp-01', false],
+      ['us-01', false],
+      ["it's", true]
+    ]);
+    expect(choices[2].desc).toBe('trojan (TCP)');
+  });
 });

@@ -14,7 +14,7 @@
 
 </div>
 
-doona is a static web UI for monitoring proxy traffic and managing nodes, groups, rules and configuration. It requires a running [honk](https://github.com/daeuniverse/honk) backend with the native API enabled; dae is not supported yet.
+doona is a static web UI for monitoring proxy traffic and managing nodes, groups, rules and configuration. It requires a running [honk](https://github.com/daeuniverse/honk) or [dae](https://github.com/daeuniverse/dae) (v2.1.2 or later) backend with the native API enabled. For dae, see its [native API guide](https://github.com/daeuniverse/dae/blob/main/docs/en/configuration/api.md).
 
 ![Activity dashboard with traffic charts and status cards](https://daeuniverse.org/doona/screenshots/en/activity-light.webp)
 
@@ -146,4 +146,7 @@ Report interface problems and ask questions in [doona issues](https://github.com
 
 ## License and credits
 
-[GPL-3.0-only](LICENSE). [Noto Sans TC and SC](docs/fonts.md), bundled from Fontsource npm packages, are copyright Adobe and licensed under the [Open Font License](LICENSES/OFL-1.1.txt); [NOTICE](NOTICE) credits the Adobe Spectrum icons (Apache-2.0).
+doona is licensed under [AGPL-3.0-only](LICENSE).
+If you provide a modified version to users, including over a network, you must offer them its corresponding source code.
+
+[Noto Sans TC and SC](docs/fonts.md), bundled from Fontsource npm packages, are copyright Adobe and licensed under the [Open Font License](LICENSES/OFL-1.1.txt); [NOTICE](NOTICE) credits the Adobe Spectrum icons (Apache-2.0).

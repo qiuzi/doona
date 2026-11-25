@@ -14,7 +14,7 @@
 
 </div>
 
-doona 是用於監控代理流量、管理節點、群組、規則與組態的靜態 Web 介面。使用時需要正在運作且已啟用原生 API 的 [honk](https://github.com/daeuniverse/honk) 後端；目前不支援 dae。
+doona 是用於監控代理流量、管理節點、群組、規則與組態的靜態 Web 介面。使用時需要正在運作且已啟用原生 API 的 [honk](https://github.com/daeuniverse/honk) 或 [dae](https://github.com/daeuniverse/dae)（v2.1.2 起）後端，dae 的設定方式見[原生 API 文件](https://github.com/daeuniverse/dae/blob/main/docs/zh/configuration/api.md)。
 
 ![顯示流量圖表與狀態卡片的活動頁](https://daeuniverse.org/doona/screenshots/zh-TW/activity-light.webp)
 
@@ -146,4 +146,7 @@ lite 的獨立相依套件安裝與建置指令見[開發](https://daeuniverse.o
 
 ## 授權與致謝
 
-[GPL-3.0-only](LICENSE)。[Noto Sans TC 與 SC](docs/fonts.md) 由 Fontsource npm 套件提供，版權歸 Adobe 所有，採用 [Open Font License](LICENSES/OFL-1.1.txt)。[NOTICE](NOTICE) 註明 Adobe Spectrum 圖示（Apache-2.0）。
+doona 採用 [AGPL-3.0-only](LICENSE) 授權。
+若向使用者提供修改版（包括透過網路提供），就必須向這些使用者提供取得對應原始碼的途徑。
+
+[Noto Sans TC 與 SC](docs/fonts.md) 由 Fontsource npm 套件提供，版權歸 Adobe 所有，採用 [Open Font License](LICENSES/OFL-1.1.txt)。[NOTICE](NOTICE) 註明 Adobe Spectrum 圖示（Apache-2.0）。
